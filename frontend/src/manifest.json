@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Post Guardian",
+  "version": "0.1",
+  "description": "AI-powered privacy protection browser extension using Google Gemini",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": ["scripting", "activeTab", "storage"],
+  "host_permissions": ["https://x.com/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*"],
+      "js": ["config.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

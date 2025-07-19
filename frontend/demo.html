@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post Guardian Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f7f9fa;
+        }
+        
+        .demo-container {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .demo-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .demo-header h1 {
+            color: #1da1f2;
+            margin-bottom: 10px;
+        }
+        
+        .demo-header p {
+            color: #657786;
+            font-size: 16px;
+        }
+        
+        .tweet-box {
+            border: 1px solid #e1e8ed;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            background: white;
+            position: relative;
+            min-height: 120px;
+        }
+        
+        .tweet-input {
+            width: 100%;
+            min-height: 100px;
+            border: none;
+            outline: none;
+            resize: none;
+            font-size: 20px;
+            font-family: inherit;
+            line-height: 1.4;
+        }
+        
+        .tweet-overlay {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            bottom: 16px;
+            pointer-events: none;
+            color: transparent;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            font-size: 20px;
+            line-height: 1.4;
+            font-family: inherit;
+        }
+        
+        .banner {
+            padding: 12px;
+            margin-top: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .banner.show {
+            display: block;
+        }
+        
+        .banner.low {
+            background: rgba(40, 167, 69, 0.1);
+            color: #28a745;
+            border-left: 3px solid #28a745;
+        }
+        
+        .banner.medium {
+            background: rgba(255, 193, 7, 0.1);
+            color: #ffc107;
+            border-left: 3px solid #ffc107;
+        }
+        
+        .banner.high {
+            background: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
+            border-left: 3px solid #dc3545;
+        }
+        
+        .banner.unknown {
+            background: rgba(108, 117, 125, 0.1);
+            color: #6c757d;
+            border-left: 3px solid #6c757d;
+        }
+        
+        .stats {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        
+        .stats h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .test-words {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .test-words h3 {
+            margin-top: 0;
+            color: #1976d2;
+        }
+        
+        .test-words ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .test-words li {
+            margin: 5px 0;
+            color: #424242;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            color: #657786;
+            font-style: italic;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="demo-header">
+            <h1>🛡️ Post Guardian Demo</h1>
+            <p>Test the AI-powered privacy protection system</p>
+        </div>
+        
+        <div class="tweet-box">
+            <textarea 
+                class="tweet-input" 
+                placeholder="What's happening?"
+                aria-label="Post text"
+            ></textarea>
+            <div class="tweet-overlay" id="tweet-overlay"></div>
+        </div>
+        
+        <div class="banner" id="banner">
+            <div id="banner-content">🛡️ Post Guardian is analyzing your text...</div>
+        </div>
+        
+        <div class="loading" id="loading">
+            Analyzing with AI... 🤖
+        </div>
+        
+        <div class="stats" id="stats">
+            <h3>📊 Analysis Stats</h3>
+            <div id="stats-content">
+                <p>No analysis performed yet. Start typing to see the magic!</p>
+            </div>
+        </div>
+        
+        <div class="test-words">
+            <h3>🧪 Test Words</h3>
+            <p>Try typing these words to see the analysis in action:</p>
+            <ul>
+                <li><strong>Personal Info:</strong> ssn, password, credit card, address</li>
+                <li><strong>Financial:</strong> bank account, routing number, salary</li>
+                <li><strong>Medical:</strong> diagnosis, prescription, insurance</li>
+                <li><strong>Test Words:</strong> rat, astronomical, tacos</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Demo configuration
+        const config = {
+            GEMINI_API_KEY: 'AIzaSyA0n-1Q7OzY9yXFOF7SUNuy_2nK8UQvgIY',
+            GEMINI_MODEL: 'gemini-1.5-flash',
+            DEBOUNCE_DELAY: 1000,
+            CONFIDENCE_THRESHOLD: 70,
+            BANNER_COLORS: {
+                'LOW': '#28a745',
+                'MEDIUM': '#ffc107', 
+                'HIGH': '#dc3545',
+                'UNKNOWN': '#6c757d'
+            }
+        };
+
+        // Demo state
+        let stats = {
+            apiCalls: 0,
+            hits: 0,
+            misses: 0,
+            lastAnalysis: null,
+            currentRiskyElements: []
+        };
+
+        // Elements
+        const tweetInput = document.querySelector('.tweet-input');
+        const tweetOverlay = document.getElementById('tweet-overlay');
+        const banner = document.getElementById('banner');
+        const bannerContent = document.getElementById('banner-content');
+        const loading = document.getElementById('loading');
+        const statsContent = document.getElementById('stats-content');
+
+        // Debounce function
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Update overlay with risky word highlighting
+        function updateOverlay() {
+            const text = tweetInput.value;
+            
+            // Use AI-detected risky elements
+            if (stats.currentRiskyElements && stats.currentRiskyElements.length > 0) {
+                let wrappedHTML = text;
+                
+                stats.currentRiskyElements.forEach(element => {
+                    const escapedText = element.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`(${escapedText})`, 'gi');
+                    wrappedHTML = wrappedHTML.replace(regex, (match, text) => {
+                        const severityColor = element.severity === 'HIGH' ? '#dc3545' : 
+                                            element.severity === 'MEDIUM' ? '#ffc107' : '#28a745';
+                        return `<span class="risky-word" 
+                            style="border-bottom: 2px solid ${severityColor}; cursor: help; pointer-events: auto;" 
+                            data-risk-type="${element.type}"
+                            data-risk-explanation="${element.risk}"
+                            data-alternatives="${element.alternatives ? element.alternatives.join('|') : ''}"
+                            title="⚠️ Privacy Risk: ${element.risk}">${text}</span>`;
+                    });
+                });
+                
+                tweetOverlay.innerHTML = wrappedHTML;
+            } else {
+                tweetOverlay.innerHTML = text;
+            }
+            
+            // Add hover event listeners to risky words
+            const riskyWords = tweetOverlay.querySelectorAll('.risky-word');
+            riskyWords.forEach(wordSpan => {
+                // Remove existing listeners to prevent duplicates
+                wordSpan.removeEventListener('mouseenter', showTooltip);
+                wordSpan.removeEventListener('mouseleave', hideTooltip);
+                
+                // Add new listeners
+                wordSpan.addEventListener('mouseenter', showTooltip);
+                wordSpan.addEventListener('mouseleave', hideTooltip);
+            });
+        }
+
+        // Tooltip functionality
+        function showTooltip(event) {
+            const word = event.target;
+            const rect = word.getBoundingClientRect();
+            
+            // Remove existing tooltip
+            const existingTooltip = document.getElementById('post-guardian-tooltip');
+            if (existingTooltip) {
+                existingTooltip.remove();
+            }
+            
+            // Get risk data from the span
+            const riskType = word.dataset.riskType || 'OTHER';
+            const riskExplanation = word.dataset.riskExplanation || 'This word may contain sensitive information.';
+            const alternatives = word.dataset.alternatives ? word.dataset.alternatives.split('|') : [];
+            
+            // Create tooltip
+            const tooltip = document.createElement('div');
+            tooltip.id = 'post-guardian-tooltip';
+            tooltip.style = `
+                position: fixed;
+                top: ${rect.bottom + 5}px;
+                left: ${rect.left}px;
+                background: #2c3e50;
+                color: white;
+                padding: 12px 16px;
+                border-radius: 8px;
+                font-size: 13px;
+                z-index: 10000;
+                max-width: 320px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+                pointer-events: none;
+                border: 1px solid #34495e;
+            `;
+            
+            const wordText = word.textContent;
+            let tooltipContent = `
+                <div style="font-weight: bold; margin-bottom: 6px; color: #e74c3c;">⚠️ Privacy Risk Detected</div>
+                <div style="margin-bottom: 8px;"><strong>"${wordText}"</strong></div>
+                <div style="margin-bottom: 8px; font-size: 12px;"><strong>Type:</strong> ${riskType.replace('_', ' ')}</div>
+                <div style="margin-bottom: 8px; font-size: 12px;"><strong>Risk:</strong> ${riskExplanation}</div>
+            `;
+            
+            if (alternatives.length > 0) {
+                tooltipContent += `
+                    <div style="font-size: 11px; color: #bdc3c7;">
+                        <strong>Safer alternatives:</strong><br>
+                        ${alternatives.map(alt => `• ${alt}`).join('<br>')}
+                    </div>
+                `;
+            }
+            
+            tooltip.innerHTML = tooltipContent;
+            
+            document.body.appendChild(tooltip);
+            
+            // Adjust position if tooltip goes off screen
+            const tooltipRect = tooltip.getBoundingClientRect();
+            if (tooltipRect.right > window.innerWidth) {
+                tooltip.style.left = `${window.innerWidth - tooltipRect.width - 10}px`;
+            }
+            if (tooltipRect.bottom > window.innerHeight) {
+                tooltip.style.top = `${rect.top - tooltipRect.height - 5}px`;
+            }
+        }
+
+        function hideTooltip() {
+            const tooltip = document.getElementById('post-guardian-tooltip');
+            if (tooltip) {
+                tooltip.remove();
+            }
+        }
+
+        // Check for risky words
+        function checkForRiskyWords() {
+            const text = tweetInput.value;
+            
+            if (text.trim().length === 0) {
+                hideBanner();
+                stats.currentRiskyElements = [];
+                updateOverlay();
+                return;
+            }
+
+            analyzeWithAI(text);
+        }
+
+        // Analyze with AI
+        async function analyzeWithAI(text) {
+            try {
+                stats.apiCalls++;
+                loading.classList.add('show');
+                banner.classList.add('show', 'unknown');
+                bannerContent.innerHTML = "🛡️ Post Guardian: Analyzing with AI...";
+
+                const prompt = `You are a privacy and security expert analyzing social media posts for potential privacy risks.
+
+TEXT TO ANALYZE: "${text}"
+
+Your task is to:
+1. Identify ANY words, phrases, or patterns that could pose privacy or security risks
+2. For each risky element, explain WHY it's risky and suggest safer alternatives
+3. Provide an overall risk assessment
+
+Consider these risk categories:
+- Personal Information (names, addresses, phone numbers, emails)
+- Financial Information (account numbers, credit cards, banking details)
+- Medical Information (diagnoses, medications, health conditions)
+- Location Data (specific addresses, GPS coordinates, workplace details)
+- Employment Information (salary, company secrets, internal projects)
+- Family Information (children's names, school details, family schedules)
+- Sensitive Dates (birthdays, anniversaries, important events)
+- Passwords, PINs, or security credentials
+- Any other information that could be used maliciously
+
+Please respond with this EXACT JSON format (no additional text):
+{
+    "riskLevel": "LOW|MEDIUM|HIGH",
+    "confidence": 85,
+    "riskyElements": [
+        {
+            "text": "the risky word or phrase",
+            "type": "PERSONAL_INFO|FINANCIAL|MEDICAL|LOCATION|EMPLOYMENT|FAMILY|DATES|CREDENTIALS|OTHER",
+            "risk": "Detailed explanation of why this is risky",
+            "alternatives": ["safer alternative 1", "safer alternative 2"],
+            "severity": "LOW|MEDIUM|HIGH"
+        }
+    ],
+    "overallConcerns": ["list of main privacy concerns"],
+    "recommendations": ["list of general recommendations"],
+    "detectedKeywords": ["list of all risky words/phrases found"]
+}
+
+If no risks are found, return:
+{
+    "riskLevel": "LOW",
+    "confidence": 95,
+    "riskyElements": [],
+    "overallConcerns": [],
+    "recommendations": ["Your post appears safe to share"],
+    "detectedKeywords": []
+}`;
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.GEMINI_MODEL}:generateContent?key=${config.GEMINI_API_KEY}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{
+                                text: prompt
+                            }]
+                        }]
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const aiResponse = result.candidates[0].content.parts[0].text;
+                
+                try {
+                    // Clean the response - remove markdown code blocks if present
+                    let cleanedResponse = aiResponse.trim();
+                    
+                    // Remove markdown code blocks (```json ... ```)
+                    if (cleanedResponse.startsWith('```json')) {
+                        cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+                    } else if (cleanedResponse.startsWith('```')) {
+                        cleanedResponse = cleanedResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+                    }
+                    
+                    const analysis = JSON.parse(cleanedResponse);
+                    
+                    // Validate the response structure
+                    if (!analysis.riskLevel || !analysis.riskyElements) {
+                        throw new Error('Invalid response structure from AI');
+                    }
+                    
+                    stats.lastAnalysis = analysis;
+                    stats.currentRiskyElements = analysis.riskyElements || [];
+                    updateBanner(analysis);
+                    updateOverlay();
+                    updateStats();
+                } catch (parseError) {
+                    console.error('Failed to parse AI response:', aiResponse);
+                    console.error('Parse error:', parseError);
+                    showErrorBanner();
+                }
+            } catch (error) {
+                console.error('Analysis error:', error);
+                showErrorBanner();
+            } finally {
+                loading.classList.remove('show');
+            }
+        }
+
+        // Update banner with analysis
+        function updateBanner(analysis) {
+            const riskLevel = analysis.riskLevel || 'UNKNOWN';
+            const color = config.BANNER_COLORS[riskLevel] || config.BANNER_COLORS['UNKNOWN'];
+            
+            banner.className = `banner show ${riskLevel.toLowerCase()}`;
+            
+            let content = `🛡️ Post Guardian: ${riskLevel} RISK (${analysis.confidence || 0}% confidence)<br><br>`;
+            
+            if (analysis.overallConcerns && analysis.overallConcerns.length > 0) {
+                content += `<strong>Concerns:</strong><br>`;
+                analysis.overallConcerns.forEach(concern => {
+                    content += `• ${concern}<br>`;
+                });
+                content += `<br>`;
+            }
+            
+            if (analysis.recommendations && analysis.recommendations.length > 0) {
+                content += `<strong>Recommendations:</strong><br>`;
+                analysis.recommendations.forEach(rec => {
+                    content += `• ${rec}<br>`;
+                });
+            }
+            
+            bannerContent.innerHTML = content;
+        }
+
+        // Show error banner
+        function showErrorBanner() {
+            banner.className = 'banner show unknown';
+            bannerContent.innerHTML = "❌ Post Guardian: Unable to analyze text. Please check your API key.";
+        }
+
+        // Hide banner
+        function hideBanner() {
+            banner.classList.remove('show');
+        }
+
+        // Update stats
+        function updateStats() {
+            const lastAnalysis = stats.lastAnalysis;
+            let content = `
+                <p><strong>API Calls:</strong> ${stats.apiCalls}</p>
+                <p><strong>Cache Hits:</strong> ${stats.hits}</p>
+                <p><strong>Cache Misses:</strong> ${stats.misses}</p>
+            `;
+            
+            if (lastAnalysis) {
+                content += `
+                    <p><strong>Last Analysis:</strong></p>
+                    <ul>
+                        <li>Risk Level: ${lastAnalysis.riskLevel}</li>
+                        <li>Confidence: ${lastAnalysis.confidence}%</li>
+                        <li>Risky Elements: ${lastAnalysis.riskyElements ? lastAnalysis.riskyElements.length : 0}</li>
+                        <li>Keywords Found: ${lastAnalysis.detectedKeywords ? lastAnalysis.detectedKeywords.join(', ') : 'None'}</li>
+                    </ul>
+                `;
+            }
+            
+            statsContent.innerHTML = content;
+        }
+
+        // Event listeners
+        const debouncedCheck = debounce(checkForRiskyWords, config.DEBOUNCE_DELAY);
+
+        tweetInput.addEventListener('input', (e) => {
+            updateOverlay();
+            debouncedCheck();
+        });
+
+        // Initialize
+        updateStats();
+    </script>
+</body>
+</html> 
