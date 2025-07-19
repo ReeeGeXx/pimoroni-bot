@@ -29,7 +29,7 @@ This project is designed for a Raspberry Pi-based Pimoroni Trilobot robot. It pr
 1. Make sure the Pi camera is enabled and connected.
 2. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   pip3 install -r requirements.txt
    ```
 3. Run the main robot mode:
    ```bash
@@ -58,4 +58,47 @@ This project is designed for a Raspberry Pi-based Pimoroni Trilobot robot. It pr
 - `auto_blur_pipeline.py`, `robot_record_and_upload.py`, etc. are for batch processing or experiments and are not needed for basic robot mode.
 
 ---
-This README is focused on documentation and clarity. For advanced features (cloud analysis, web UI, etc.), see the relevant scripts and modules.
+
+## Troubleshooting & Setup History (Raspberry Pi)
+
+### Camera Issues
+- **libcamera-hello worked, but OpenCV could not access the camera**
+  - Solution: Ensure `/dev/video0` exists. If not, enable V4L2 with `sudo modprobe bcm2835-v4l2` and add to `/etc/modules` for persistence.
+  - If using Bookworm or later, you may need to use the legacy camera stack for OpenCV compatibility (edit `/boot/config.txt` and reboot).
+
+### OpenCV Import/Camera Issues
+- If `import cv2` fails, run `pip3 install opencv-python`.
+- If OpenCV test script returns `Success: False`, check camera permissions and V4L2 setup.
+
+### Python Package Issues
+- If you see `ModuleNotFoundError: No module named 'dotenv'`, run `pip3 install python-dotenv`.
+- If you see `ModuleNotFoundError: No module named 'pimoroni_bot'`, run from the project root or set `PYTHONPATH`:
+  ```bash
+  export PYTHONPATH="$PWD:$PYTHONPATH"
+  python3 scripts/robot_livestream_blur.py
+  ```
+
+### evdev/Trilobot Build Issues
+- If you see errors building `evdev`, install the system package:
+  ```bash
+  sudo apt install python3-evdev
+  ```
+- If you see linker errors or missing build tools, run:
+  ```bash
+  sudo apt install --reinstall gcc g++ python3-dev python3-pip python3-setuptools python3-wheel libevdev-dev libc6
+  ```
+
+### PWM Object Already Exists (Trilobot)
+- If you see `RuntimeError: A PWM object already exists for this GPIO channel`:
+  - Reboot the Pi to reset GPIO state: `sudo reboot`
+  - Make sure only one instance of `Trilobot()` is created in your code.
+  - Ensure no other Python scripts are running that use the GPIO.
+
+### General Tips
+- Always run scripts from the project root for local imports to work.
+- Use `pip3 install -r requirements.txt` to install all dependencies.
+- If you see permission errors uninstalling system packages, use `sudo pip3 uninstall ...`.
+- If you see multiple `/dev/video*` devices, make sure you are using the correct one (usually `/dev/video0`).
+
+---
+This section documents all the real-world issues and fixes encountered to get this project running on a Raspberry Pi with Trilobot and camera hardware.
