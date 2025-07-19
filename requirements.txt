@@ -1,0 +1,4 @@
+flask
+opencv-python
+trilobot
+python-dotenv 

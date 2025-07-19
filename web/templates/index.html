@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trilobot Video Search</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>Trilobot Video Search</h1>
+    <form id="uploadForm">
+        <input type="file" name="video" accept="video/*" required>
+        <button type="submit">Upload Video</button>
+    </form>
+    <div id="uploadStatus"></div>
+    <form id="searchForm" style="margin-top:20px;">
+        <input type="text" name="query" placeholder="Enter your query (search & analysis will run)" required>
+        <input type="hidden" name="video_path" id="videoPathInput">
+        <button type="submit">Go</button>
+    </form>
+    <div id="searchResults"></div>
+    <script src="/static/app.js"></script>
+</body>
+</html> 
