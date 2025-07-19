@@ -22,8 +22,10 @@ DETECTION_PROMPT = ''
 def blur_with_api(frame, prompt):
     if not TWELVELABS_API_KEY or not prompt:
         return frame
+    # Resize for faster upload
+    frame_small = cv2.resize(frame, (320, 240))
     # Encode frame as JPEG and then base64
-    ret, buf = cv2.imencode('.jpg', frame)
+    ret, buf = cv2.imencode('.jpg', frame_small)
     if not ret:
         return frame
     img_b64 = base64.b64encode(buf.tobytes()).decode('utf-8')
@@ -39,15 +41,20 @@ def blur_with_api(frame, prompt):
         "model": "marengo-1.3"
     }
     try:
-        res = requests.post(url, json=payload, headers=headers, timeout=5)
+        res = requests.post(url, json=payload, headers=headers, timeout=15)
         res.raise_for_status()
         data = res.json()
         # Parse bounding boxes from Marengo response
-        # (Assume response format: data['results'][0]['bbox'] = [x, y, w, h])
+        # (Assume response format: data['results'][0]['bbox'] = [x, y, w, h] in 320x240 space)
         for result in data.get('results', []):
             bbox = result.get('bbox')
             if bbox and len(bbox) == 4:
                 x, y, w, h = map(int, bbox)
+                # Scale bbox to original frame size
+                x = int(x * frame.shape[1] / 320)
+                w = int(w * frame.shape[1] / 320)
+                y = int(y * frame.shape[0] / 240)
+                h = int(h * frame.shape[0] / 240)
                 roi = frame[y:y+h, x:x+w]
                 roi = cv2.GaussianBlur(roi, (51, 51), 0)
                 frame[y:y+h, x:x+w] = roi
