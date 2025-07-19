@@ -8,6 +8,7 @@ from pimoroni_bot.config import TWELVELABS_API_KEY
 import numpy as np
 import base64
 import time
+import re
 
 VIDEO_PATH = "recorded_video.mp4"
 BLURRED_PATH = "blurred_video.mp4"
@@ -87,11 +88,108 @@ def gen_frames():
 def video_feed():
     return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+def analyze_with_twelvelabs(video_path):
+    """Upload video to TwelveLabs and get analysis"""
+    if not TWELVELABS_API_KEY:
+        return "No API key available"
+    
+    # Upload video to TwelveLabs
+    with open(video_path, "rb") as f:
+        files = {"file": f}
+        headers = {"x-api-key": TWELVELABS_API_KEY}
+        try:
+            upload_res = requests.post("https://api.twelvelabs.io/v1.3/videos", files=files, headers=headers)
+            upload_res.raise_for_status()
+            video_id = upload_res.json().get("video_id")
+        except Exception as e:
+            return f"Upload failed: {e}"
+    
+    # Wait for indexing
+    status = "processing"
+    while status != "ready":
+        time.sleep(5)
+        try:
+            res = requests.get(f"https://api.twelvelabs.io/v1.3/videos/{video_id}", headers=headers)
+            res.raise_for_status()
+            status = res.json().get("status")
+            if status == "failed":
+                return "Indexing failed"
+        except Exception as e:
+            return f"Status check failed: {e}"
+    
+    # Get analysis using the analyze endpoint
+    analyze_payload = {
+        "video_id": video_id,
+        "query": "Describe all objects, people, faces, license plates, and sensitive content in this video",
+        "model": "pegasus-1.3"
+    }
+    try:
+        analyze_res = requests.post("https://api.twelvelabs.io/v1.3/analyze", json=analyze_payload, headers=headers)
+        analyze_res.raise_for_status()
+        analysis = analyze_res.json()
+        return analysis.get("data", {}).get("text", "No analysis available")
+    except Exception as e:
+        return f"Analysis failed: {e}"
+
+def parse_analysis_for_detection(analysis_text):
+    """Parse TwelveLabs analysis to determine what to detect locally"""
+    analysis_lower = analysis_text.lower()
+    detection_types = []
+    
+    # Check for different types of content
+    if any(word in analysis_lower for word in ["face", "faces", "person", "people", "human"]):
+        detection_types.append("faces")
+    if any(word in analysis_lower for word in ["license plate", "license plates", "plate", "plates", "car", "vehicle"]):
+        detection_types.append("license_plates")
+    if any(word in analysis_lower for word in ["text", "sign", "document", "paper"]):
+        detection_types.append("text")
+    if any(word in analysis_lower for word in ["sensitive", "private", "confidential"]):
+        detection_types.append("sensitive")
+    
+    return detection_types
+
+def detect_and_blur_locally(video_path, detection_types):
+    """Use local OpenCV to detect objects based on TwelveLabs analysis"""
+    cap = cv2.VideoCapture(video_path)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(BLURRED_PATH, fourcc, 20.0, (640, 480))
+    
+    # Load detection models
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    
+    frame_idx = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Apply detection based on TwelveLabs analysis
+        if "faces" in detection_types:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+            for (x, y, w, h) in faces:
+                roi = frame[y:y+h, x:x+w]
+                roi = cv2.GaussianBlur(roi, (51, 51), 0)
+                frame[y:y+h, x:x+w] = roi
+        
+        # Add more detection types here as needed
+        # if "license_plates" in detection_types:
+        #     # Add license plate detection
+        #     pass
+        
+        out.write(frame)
+        frame_idx += 1
+    
+    cap.release()
+    out.release()
+    return BLURRED_PATH
+
 @app.route('/record_and_analyze', methods=['POST'])
 def record_and_analyze():
     data = request.get_json()
-    prompt = data.get('prompt', '').strip() or 'Find all faces'
+    prompt = data.get('prompt', '').strip() or 'Analyze this video for faces, license plates, and sensitive content'
     duration = int(data.get('duration', 10))  # seconds
+    
     # 1. Record video
     cap = cv2.VideoCapture(0)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -103,76 +201,42 @@ def record_and_analyze():
             out.write(frame)
     cap.release()
     out.release()
-    # 2. Upload to TwelveLabs
-    with open(VIDEO_PATH, "rb") as f:
-        files = {"file": f}
-        headers = {"x-api-key": TWELVELABS_API_KEY}
-        upload_res = requests.post("https://api.twelvelabs.io/v1.3/videos/upload", files=files, headers=headers)
-        upload_res.raise_for_status()
-        video_id = upload_res.json().get("video_id")
-    # 3. Wait for indexing
-    status = "processing"
-    while status != "ready":
-        time.sleep(5)
-        res = requests.get(f"https://api.twelvelabs.io/v1.3/videos/{video_id}", headers=headers)
-        res.raise_for_status()
-        status = res.json().get("status")
-        if status == "failed":
-            return jsonify({"error": "Indexing failed"}), 500
-    # 4. Search with prompt
-    search_payload = {
-        "video_id": video_id,
-        "query": prompt,
-        "model": "marengo-1.3"
-    }
-    search_res = requests.post("https://api.twelvelabs.io/v1.3/search", json=search_payload, headers=headers)
-    search_res.raise_for_status()
-    results = search_res.json()
-    # 5. Blur detected regions (assume results['results'] contains segments with bounding boxes and timestamps)
-    detections = []
-    for seg in results.get('results', []):
-        # Example: adjust keys to match actual API response
-        start_frame = int(seg.get('start_frame', 0))
-        end_frame = int(seg.get('end_frame', 0))
-        for obj in seg.get('objects', []):
-            x, y, w, h = obj['x'], obj['y'], obj['w'], obj['h']
-            detections.append((start_frame, end_frame, x, y, w, h))
-    # Blur video
-    cap = cv2.VideoCapture(VIDEO_PATH)
-    out = cv2.VideoWriter(BLURRED_PATH, fourcc, 20.0, (640, 480))
-    frame_idx = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        for det in detections:
-            start_f, end_f, x, y, w, h = det
-            if start_f <= frame_idx <= end_f:
-                roi = frame[y:y+h, x:x+w]
-                roi = cv2.GaussianBlur(roi, (51, 51), 0)
-                frame[y:y+h, x:x+w] = roi
-        out.write(frame)
-        frame_idx += 1
-    cap.release()
-    out.release()
-    return jsonify({"blurred_video": BLURRED_PATH})
+    
+    # 2. Analyze with TwelveLabs
+    analysis = analyze_with_twelvelabs(VIDEO_PATH)
+    if analysis.startswith("Upload failed") or analysis.startswith("Indexing failed") or analysis.startswith("Analysis failed"):
+        return jsonify({"error": analysis}), 500
+    
+    # 3. Parse analysis for detection types
+    detection_types = parse_analysis_for_detection(analysis)
+    
+    # 4. Detect and blur locally based on analysis
+    blurred_path = detect_and_blur_locally(VIDEO_PATH, detection_types)
+    
+    return jsonify({
+        "twelvelabs_analysis": analysis,
+        "detection_types": detection_types,
+        "blurred_video": blurred_path
+    })
 
 @app.route('/')
 def index():
     # UI with prompt input and Record & Analyze button
     return '''
-    <h1>Record & Analyze with TwelveLabs</h1>
-    <p>Click the button to record a short video, analyze with your prompt, and blur detected regions.</p>
+    <h1>TwelveLabs Analysis + Local Detection</h1>
+    <p>Record a video, analyze with TwelveLabs, then detect and blur locally based on the analysis.</p>
     <form id="promptForm">
-        <label>Blur Prompt (leave blank for face blur):</label>
-        <input type="text" id="blurPrompt" name="blurPrompt" placeholder="e.g. license plates">
+        <label>Analysis Prompt:</label>
+        <input type="text" id="blurPrompt" name="blurPrompt" placeholder="e.g. Analyze for faces and license plates">
         <button type="button" onclick="recordAndAnalyze()">Record & Analyze</button>
     </form>
     <div id="status"></div>
+    <div id="analysis"></div>
     <div id="videoResult"></div>
     <script>
     async function recordAndAnalyze() {
         document.getElementById('status').innerText = 'Recording and analyzing...';
+        document.getElementById('analysis').innerText = '';
         const prompt = document.getElementById('blurPrompt').value;
         const res = await fetch('/record_and_analyze', {
             method: 'POST',
@@ -182,7 +246,8 @@ def index():
         const data = await res.json();
         if (data.blurred_video) {
             document.getElementById('status').innerText = 'Done!';
-            document.getElementById('videoResult').innerHTML = `<video src="/${data.blurred_video}" controls width="480"></video>`;
+            document.getElementById('analysis').innerHTML = '<h3>TwelveLabs Analysis:</h3><p>' + data.twelvelabs_analysis + '</p><h3>Detection Types:</h3><p>' + data.detection_types.join(', ') + '</p>';
+            document.getElementById('videoResult').innerHTML = '<h3>Blurred Video:</h3><video src="/' + data.blurred_video + '" controls width="480"></video>';
         } else {
             document.getElementById('status').innerText = 'Error: ' + (data.error || 'Unknown error');
         }
