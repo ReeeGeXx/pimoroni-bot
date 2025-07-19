@@ -93,6 +93,7 @@ This project is designed for a Raspberry Pi-based Pimoroni Trilobot robot. It pr
   - Reboot the Pi to reset GPIO state: `sudo reboot`
   - Make sure only one instance of `Trilobot()` is created in your code.
   - Ensure no other Python scripts are running that use the GPIO.
+  - The main script now automatically cleans up GPIO on exit using `atexit` to prevent this error.
 
 ### General Tips
 - Always run scripts from the project root for local imports to work.

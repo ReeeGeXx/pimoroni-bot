@@ -1,4 +1,6 @@
 import threading
+import atexit
+import RPi.GPIO as GPIO
 from pimoroni_bot.robot import RobotController
 from pimoroni_bot.video_stream import app
 
@@ -9,3 +11,4 @@ if __name__ == '__main__':
     robot_thread.start()
     print("Starting Flask server on http://0.0.0.0:5002 ...")
     app.run(host='0.0.0.0', port=5002)
+    atexit.register(GPIO.cleanup)
