@@ -1,11 +1,12 @@
 import cv2
 from flask import Flask, Response, request, jsonify
 from pimoroni_bot.blur import blur_faces
-from pimoroni_bot.robot import RobotController
 import threading
 import os
 import requests
 from pimoroni_bot.config import TWELVELABS_API_KEY
+import numpy as np
+import base64
 
 app = Flask(__name__)
 cap = cv2.VideoCapture(0)
@@ -13,30 +14,49 @@ cap = cv2.VideoCapture(0)
 RECORD_VIDEO = False
 out = None
 
-# Robot controller instance (set externally if needed)
-robot_controller = RobotController()
-
 # Shared state for prompt and detection mode
 DETECTION_MODE = 'local'  # 'local' or 'api'
 DETECTION_PROMPT = ''
-API_DETECTIONS = []
-API_FRAME_IDX = 0
 
-# --- API-based detection helper ---
+# --- Real Marengo API-based detection and blurring ---
 def blur_with_api(frame, prompt):
-    # This is a placeholder for API-based detection and blurring
-    # In production, send the frame to the API, get detections, and blur accordingly
-    # For now, just return the frame unchanged
-    # You can implement batching and caching for efficiency
-    # Example (pseudo):
-    #   response = requests.post(api_url, files={'frame': ...}, data={'prompt': prompt}, headers=...)
-    #   detections = response.json()['detections']
-    #   for det in detections: ...
+    if not TWELVELABS_API_KEY or not prompt:
+        return frame
+    # Encode frame as JPEG and then base64
+    ret, buf = cv2.imencode('.jpg', frame)
+    if not ret:
+        return frame
+    img_b64 = base64.b64encode(buf.tobytes()).decode('utf-8')
+    # Prepare API request
+    url = "https://api.twelvelabs.io/v1.3/search"
+    headers = {
+        'x-api-key': TWELVELABS_API_KEY,
+        'Content-Type': 'application/json'
+    }
+    payload = {
+        "query": prompt,
+        "image": img_b64,
+        "model": "marengo-1.3"
+    }
+    try:
+        res = requests.post(url, json=payload, headers=headers, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+        # Parse bounding boxes from Marengo response
+        # (Assume response format: data['results'][0]['bbox'] = [x, y, w, h])
+        for result in data.get('results', []):
+            bbox = result.get('bbox')
+            if bbox and len(bbox) == 4:
+                x, y, w, h = map(int, bbox)
+                roi = frame[y:y+h, x:x+w]
+                roi = cv2.GaussianBlur(roi, (51, 51), 0)
+                frame[y:y+h, x:x+w] = roi
+    except Exception as e:
+        print(f"API error: {e}")
     return frame
 
 # --- Video stream generator ---
 def gen_frames():
-    global API_FRAME_IDX
     while True:
         success, frame = cap.read()
         if not success:
@@ -51,7 +71,6 @@ def gen_frames():
         frame = buffer.tobytes()
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-        API_FRAME_IDX += 1
 
 @app.route('/video_feed')
 def video_feed():
@@ -59,10 +78,10 @@ def video_feed():
 
 @app.route('/')
 def index():
-    # Simple UI with robot controls and prompt input
+    # Simple UI with prompt input only
     return '''
-    <h1>Robot Mode: Live Stream (Blurred)</h1>
-    <p>This is the embedded robot mode. The robot moves and streams live video with real-time blur.</p>
+    <h1>Live Stream (Blurred)</h1>
+    <p>Prompt-based blurring using TwelveLabs Marengo API.</p>
     <img src="/video_feed" style="max-width: 100%; height: auto; border: 1px solid #ccc;"><br><br>
     <form id="promptForm">
         <label>Blur Prompt (leave blank for face blur):</label>
@@ -70,12 +89,6 @@ def index():
         <button type="submit">Set Blur Prompt</button>
     </form>
     <p id="detectionMode"></p>
-    <div>
-        <button onclick="sendCommand('forward')">Forward</button>
-        <button onclick="sendCommand('left')">Left</button>
-        <button onclick="sendCommand('right')">Right</button>
-        <button onclick="sendCommand('stop')">Stop</button>
-    </div>
     <script>
     document.getElementById('promptForm').onsubmit = async function(e) {
         e.preventDefault();
@@ -88,13 +101,6 @@ def index():
         const data = await res.json();
         document.getElementById('detectionMode').innerText = 'Detection mode: ' + data.mode + (data.prompt ? ' ("' + data.prompt + '")' : '');
     };
-    async function sendCommand(cmd) {
-        await fetch('/robot_command', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: cmd })
-        });
-    }
     </script>
     '''
 
@@ -110,33 +116,4 @@ def set_prompt():
     else:
         DETECTION_MODE = 'local'
         DETECTION_PROMPT = ''
-    return jsonify({'mode': DETECTION_MODE, 'prompt': DETECTION_PROMPT})
-
-# --- Endpoint to control the robot ---
-@app.route('/robot_command', methods=['POST'])
-def robot_command():
-    data = request.get_json()
-    cmd = data.get('command')
-    if not robot_controller:
-        return jsonify({'status': 'error', 'message': 'Robot not available'}), 400
-    # Run robot commands in a thread to avoid blocking
-    def do_cmd():
-        if cmd == 'forward':
-            robot_controller.move_forward(speed=0.5, duration=1)
-        elif cmd == 'left':
-            if hasattr(robot_controller.tbot, 'left'):
-                robot_controller.tbot.left(0.5)
-                import time; time.sleep(1)
-                robot_controller.tbot.stop()
-        elif cmd == 'right':
-            if hasattr(robot_controller.tbot, 'right'):
-                robot_controller.tbot.right(0.5)
-                import time; time.sleep(1)
-                robot_controller.tbot.stop()
-        elif cmd == 'stop':
-            robot_controller.tbot.stop()
-    threading.Thread(target=do_cmd).start()
-    return jsonify({'status': 'ok', 'command': cmd})
-
-# --- API-based detection and blurring (placeholder) ---
-# You can implement actual API calls here using the TwelveLabs API or similar 
+    return jsonify({'mode': DETECTION_MODE, 'prompt': DETECTION_PROMPT}) 
