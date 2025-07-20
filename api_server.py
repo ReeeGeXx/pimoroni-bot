@@ -9,7 +9,7 @@ CORS(app)  # Enable CORS if needed for your Chrome extension
 @app.route("/analyze-video", methods=["POST"])
 def analyze_video():
     data = request.get_json()
-    prompt = data.get("prompt", "Find inappropriate content")
+    prompt = data.get("prompt", "Find clips for inappropriate content in a video such as middle fingers, bad words (audio or visual), license plates, addresses and what not")
 
     try:
         result = show_detailed_analysis(prompt)

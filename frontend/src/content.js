@@ -113,9 +113,7 @@ async function analyzeTextWithGemini(text) {
 
     cacheManager.stats.apiCalls++;
     console.log(`Making API call #${cacheManager.stats.apiCalls} to Gemini via service worker`);
-    const responseTL = await chrome.runtime.sendMessage({ type: 'ANALYZE_VIDEO' }, (responseTL) => {
-        console.log('Response from listener:', responseTL);
-    });
+
     try {
         // Send message to service worker for API call
         const response = await chrome.runtime.sendMessage({
@@ -124,8 +122,13 @@ async function analyzeTextWithGemini(text) {
                 text,
                 config
             }
-            
+
         });
+        const responseTL = await chrome.runtime.sendMessage({ 
+            type: 'ANALYZE_VIDEO', 
+            data: {config} 
+        });
+        console.log('Response from listener:', responseTL);
         console.log(text);
 
         if (response.success && response.analysis) {
@@ -354,15 +357,15 @@ function showTooltip(event) {
     //let riskLevel = word.dataset.riskLevel || 'LOW';
     // Severity color accent
     let accentColor = '#6c757d';
-    if (['CRITICAL'].includes(riskType)) accentColor = '#ff0000ff';         
-    else if (['CREDENTIALS'].includes(riskType)) accentColor = '#dc3545'; 
-    else if (['FINANCIAL'].includes(riskType)) accentColor = '#d63384';   
-    else if (['MEDICAL'].includes(riskType)) accentColor = '#e83e8c';     
-    else if (['LOCATION'].includes(riskType)) accentColor = '#fd7e14';    
-    else if (['PERSONAL_INFO'].includes(riskType)) accentColor = '#ffc107'; 
-    else if (['FAMILY'].includes(riskType)) accentColor = '#17a2b8';      
-    else if (['DATES'].includes(riskType)) accentColor = '#6c757d';       
-    else if (['OTHER'].includes(riskType)) accentColor = '#6c757d';       
+    if (['CRITICAL'].includes(riskType)) accentColor = '#ff0000ff';
+    else if (['CREDENTIALS'].includes(riskType)) accentColor = '#dc3545';
+    else if (['FINANCIAL'].includes(riskType)) accentColor = '#d63384';
+    else if (['MEDICAL'].includes(riskType)) accentColor = '#e83e8c';
+    else if (['LOCATION'].includes(riskType)) accentColor = '#fd7e14';
+    else if (['PERSONAL_INFO'].includes(riskType)) accentColor = '#ffc107';
+    else if (['FAMILY'].includes(riskType)) accentColor = '#17a2b8';
+    else if (['DATES'].includes(riskType)) accentColor = '#6c757d';
+    else if (['OTHER'].includes(riskType)) accentColor = '#6c757d';
 
     let riskTypeDisplay = toTitleCase(riskType);
     //let riskLevelDisplay = toTitleCase(riskLevel);
