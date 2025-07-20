@@ -128,8 +128,90 @@ def analyze_robot_segment(segment_path):
         indexes_data = indexes_res.json()
         index_id = indexes_data['data'][0]['_id']
         
-        # For now, we'll analyze existing videos since upload isn't working
-        # In the future, we could upload the segment here
+        # Try to upload the robot's recorded segment
+        try:
+            print(f"📤 Uploading robot segment to TwelveLabs...")
+            with open(segment_path, "rb") as f:
+                files = {"video": f}
+                headers = {"x-api-key": TWELVELABS_API_KEY}
+                upload_res = requests.post(f"https://api.twelvelabs.io/v1.3/indexes/{index_id}/videos", 
+                                         files=files, headers=headers)
+                
+                if upload_res.status_code == 200:
+                    upload_data = upload_res.json()
+                    video_id = upload_data['data']['_id']
+                    print(f"✅ Upload successful: {video_id}")
+                    
+                    # Wait for indexing
+                    print("⏳ Waiting for indexing...")
+                    status = "processing"
+                    max_wait = 120  # 2 minutes max wait
+                    wait_time = 0
+                    
+                    while status != "COMPLETE" and wait_time < max_wait:
+                        time.sleep(5)
+                        wait_time += 5
+                        try:
+                            res = requests.get(f"https://api.twelvelabs.io/v1.3/indexes/{index_id}/videos/{video_id}", 
+                                             headers=headers)
+                            res.raise_for_status()
+                            video_info = res.json()
+                            status = video_info['data']['hls']['status']
+                            print(f"   Indexing status: {status} ({wait_time}s)")
+                            if status == "FAILED":
+                                raise Exception("Indexing failed")
+                        except Exception as e:
+                            print(f"   Status check failed: {e}")
+                            break
+                    
+                    if status == "COMPLETE":
+                        # Now analyze the uploaded segment
+                        search_payload = {
+                            "index_id": (None, index_id),
+                            "query_text": (None, "Find people, faces, license plates, cars, and sensitive content"),
+                            "search_options": (None, "visual")
+                        }
+                        search_res = requests.post("https://api.twelvelabs.io/v1.3/search", 
+                                                 files=search_payload, 
+                                                 headers={"x-api-key": TWELVELABS_API_KEY})
+                        search_res.raise_for_status()
+                        search_data = search_res.json()
+                        
+                        # Store results for UI display
+                        analysis_results.append({
+                            'timestamp': time.time(),
+                            'segment': segment_path,
+                            'results': search_data.get('data', []),
+                            'video_analyzed': f"Robot Segment: {os.path.basename(segment_path)}",
+                            'uploaded_video_id': video_id
+                        })
+                        
+                        print(f"✅ Analysis complete: {len(search_data.get('data', []))} segments found")
+                        
+                        # Keep only last 5 results
+                        if len(analysis_results) > 5:
+                            analysis_results.pop(0)
+                    else:
+                        print("❌ Indexing timeout")
+                        # Fall back to analyzing existing videos
+                        analyze_existing_videos(index_id, segment_path)
+                        
+                else:
+                    print(f"❌ Upload failed: {upload_res.status_code} - {upload_res.text}")
+                    # Fall back to analyzing existing videos
+                    analyze_existing_videos(index_id, segment_path)
+                    
+        except Exception as e:
+            print(f"❌ Upload failed: {e}")
+            # Fall back to analyzing existing videos
+            analyze_existing_videos(index_id, segment_path)
+        
+    except Exception as e:
+        print(f"❌ Analysis failed: {e}")
+
+def analyze_existing_videos(index_id, segment_path):
+    """Fallback: analyze existing videos when upload fails"""
+    try:
         videos_res = requests.get(f"https://api.twelvelabs.io/v1.3/indexes/{index_id}/videos", 
                                 headers={"x-api-key": TWELVELABS_API_KEY})
         videos_res.raise_for_status()
@@ -158,17 +240,17 @@ def analyze_robot_segment(segment_path):
                 'timestamp': time.time(),
                 'segment': segment_path,
                 'results': search_data.get('data', []),
-                'video_analyzed': filename
+                'video_analyzed': f"Fallback: {filename}",
+                'uploaded_video_id': None
             })
             
-            print(f"✅ Analysis complete: {len(search_data.get('data', []))} segments found")
+            print(f"✅ Fallback analysis complete: {len(search_data.get('data', []))} segments found")
             
             # Keep only last 5 results
             if len(analysis_results) > 5:
                 analysis_results.pop(0)
-        
     except Exception as e:
-        print(f"❌ Analysis failed: {e}")
+        print(f"❌ Fallback analysis failed: {e}")
 
 def should_record_segment():
     """Check if it's time to record a new segment"""
@@ -652,7 +734,16 @@ def index():
                             resultsHtml += `<li>Score: ${seg.score?.toFixed(2)}, Time: ${seg.start?.toFixed(1)}s-${seg.end?.toFixed(1)}s</li>`;
                         });
                         
-                        resultsHtml += '</ul></div>';
+                        resultsHtml += '</ul>';
+                        
+                        // Show if this was uploaded or fallback
+                        if (result.video_analyzed.startsWith('Robot Segment:')) {
+                            resultsHtml += '<span style="color: green; font-weight: bold;">✅ Uploaded Robot Segment</span>';
+                        } else if (result.video_analyzed.startsWith('Fallback:')) {
+                            resultsHtml += '<span style="color: orange; font-weight: bold;">⚠️ Fallback Analysis</span>';
+                        }
+                        
+                        resultsHtml += '</div>';
                     });
                     resultsDiv.innerHTML = resultsHtml;
                 } else {
