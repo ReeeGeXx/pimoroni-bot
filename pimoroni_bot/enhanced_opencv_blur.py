@@ -36,7 +36,7 @@ class EnhancedOpenCVBlur:
         self.blur_strength=51
         self.pixelation_size=20
         
-    def parse_prompt(self,prompt):
+    def parse_prompt(self, prompt):
         """Parse custom prompt to determine what to detect"""
         prompt_lower = prompt.lower()
         detection_types = []
@@ -66,12 +66,8 @@ class EnhancedOpenCVBlur:
         if any(word in prompt_lower for word in ['license plate', 'plate', 'car', 'vehicle', 'number plate']):
             detection_types.append('license_plates')
         
-        # Object detection (general)
-        if any(word in prompt_lower for word in ['object', 'item', 'thing', 'detect', 'find']):
-            detection_types.append('objects')
-        
-        # Sensitive content
-        if any(word in prompt_lower for word in ['sensitive', 'private', 'confidential', 'blur', 'hide']):
+        # Sensitive content - ONLY if explicitly requested
+        if any(word in prompt_lower for word in ['sensitive', 'private', 'confidential', 'hide']):
             detection_types.append('sensitive')
         
         return detection_types

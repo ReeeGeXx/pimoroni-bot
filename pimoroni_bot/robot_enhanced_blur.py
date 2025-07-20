@@ -83,8 +83,8 @@ class RobotEnhancedBlur:
         if any(word in prompt_lower for word in ['license plate', 'plate', 'car', 'vehicle', 'number plate']):
             detection_types.append('license_plates')
         
-        # Sensitive content
-        if any(word in prompt_lower for word in ['sensitive', 'private', 'confidential', 'blur', 'hide']):
+        # Sensitive content - ONLY if explicitly requested
+        if any(word in prompt_lower for word in ['sensitive', 'private', 'confidential', 'hide']):
             detection_types.append('sensitive')
         
         return detection_types
