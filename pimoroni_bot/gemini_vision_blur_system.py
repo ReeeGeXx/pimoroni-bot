@@ -19,10 +19,10 @@ class GeminiVisionBlur:
     def __init__(self):
         # Gemini API configuration
         self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-        self.api_key = os.getenv('GENAPI_API_KEY')  # Using the same key for now
+        self.api_key = os.getenv('GENAPI_API_KEY')  #Using the same key for now
         
         if not self.api_key:
-            print("⚠️  Warning: GENAPI_API_KEY not found in .env file")
+            print("Warning: GENAPI_API_KEY not found in .env file")
             print("   Please add your Gemini API key to .env file")
             print("   Example: GENAPI_API_KEY=your_gemini_api_key_here")
         
@@ -99,7 +99,7 @@ class GeminiVisionBlur:
                 }
             }
             
-            print(f"🔍 Calling Gemini API with prompt: '{prompt}'")
+            print(f"Calling Gemini API with prompt: '{prompt}'")
             
             # Make API call
             url = f"{self.gemini_url}?key={self.api_key}"
@@ -107,14 +107,14 @@ class GeminiVisionBlur:
             
             if response.status_code == 200:
                 result = response.json()
-                print(f"✅ Gemini response received")
+                print(f"Gemini response received")
                 return self.parse_gemini_response(result)
             else:
-                print(f"❌ Gemini error: {response.status_code} - {response.text}")
+                print(f"Gemini error: {response.status_code} - {response.text}")
                 return []
                 
         except Exception as e:
-            print(f"❌ Gemini call failed: {str(e)}")
+            print(f"Gemini call failed: {str(e)}")
             return []
     
     def parse_gemini_response(self, response):
@@ -127,7 +127,7 @@ class GeminiVisionBlur:
                 if 'content' in candidate and 'parts' in candidate['content']:
                     text_response = candidate['content']['parts'][0].get('text', '')
                     
-                    print(f"🔍 Raw Gemini response: {text_response[:200]}...")
+                    print(f"Raw Gemini response: {text_response[:200]}...")
                     
                     # Try to extract JSON from response
                     try:
@@ -150,14 +150,14 @@ class GeminiVisionBlur:
                                                 'type': detection.get('type', 'unknown'),
                                                 'confidence': detection.get('confidence', 0.0)
                                             })
-                                            print(f"   📍 Parsed detection: {detection.get('type')} at {bbox}")
+                                            print(f"Parsed detection: {detection.get('type')} at {bbox}")
                                         else:
-                                            print(f"   ⚠️  Skipping invalid coordinates: {bbox}")
+                                            print(f"Skipping invalid coordinates: {bbox}")
                     except json.JSONDecodeError:
-                        print(f"❌ Could not parse JSON from Gemini response: {text_response[:100]}...")
+                        print(f"Could not parse JSON from Gemini response: {text_response[:100]}...")
                         
         except Exception as e:
-            print(f"❌ Error parsing Gemini response: {str(e)}")
+            print(f"Error parsing Gemini response: {str(e)}")
         
         return detections
     
@@ -231,16 +231,16 @@ class GeminiVisionBlur:
             if cache_key in self.detection_cache:
                 cache_time, cached_detections = self.detection_cache[cache_key]
                 if current_time - cache_time < self.cache_duration:
-                    print(f"📋 Using cached detection for frame {self.frame_count}")
+                    print(f"Using cached detection for frame {self.frame_count}")
                     blur_regions = self.process_detections(cached_detections, frame.shape)
                 else:
                     # Cache expired, call API
-                    print(f"🔍 Analyzing frame {self.frame_count} with Gemini...")
+                    print(f"Analyzing frame {self.frame_count} with Gemini...")
                     detections = self.call_gemini_analysis(frame, prompt)
                     
                     # If Gemini returns no detections, use fallback
                     if not detections:
-                        print("⚠️  Gemini returned no detections, using OpenCV fallback...")
+                        print("Gemini returned no detections, using OpenCV fallback...")
                         detections = self.fallback_opencv_detection(frame)
                     
                     self.detection_cache[cache_key] = (current_time, detections)
@@ -248,12 +248,12 @@ class GeminiVisionBlur:
                     self.last_analysis_frame = self.frame_count
             else:
                 # No cache, call API
-                print(f"🔍 Analyzing frame {self.frame_count} with Gemini...")
+                print(f"Analyzing frame {self.frame_count} with Gemini...")
                 detections = self.call_gemini_analysis(frame, prompt)
                 
                 # If Gemini returns no detections, use fallback
                 if not detections:
-                    print("⚠️  Gemini returned no detections, using OpenCV fallback...")
+                    print("Gemini returned no detections, using OpenCV fallback...")
                     detections = self.fallback_opencv_detection(frame)
                 
                 self.detection_cache[cache_key] = (current_time, detections)
@@ -288,7 +288,7 @@ class GeminiVisionBlur:
                 frame_stats['sensitive_content'] += 1
             
             if should_analyze:  # Only print during analysis frames
-                print(f"   ✅ Blurred {detection_type} (confidence: {confidence:.2f}) at {bbox}")
+                print(f"Blurred {detection_type} (confidence: {confidence:.2f}) at {bbox}")
         
         # Update global stats
         for key, value in frame_stats.items():
@@ -366,8 +366,8 @@ class GeminiVisionBlur:
     
     def start_gemini_stream(self, camera_index=0):
         """Start Gemini-powered video stream"""
-        print(f"🤖 Starting Gemini-Powered Blur Stream")
-        print(f"📝 Current prompt: '{self.current_prompt}'")
+        print(f"Gemini-Powered Blur Stream")
+        print(f"Current prompt: '{self.current_prompt}'")
         print("Controls: Q=Quit, P=Change Prompt, R=Record, S=Stop")
         
         if not self.api_key:
@@ -424,7 +424,7 @@ class GeminiVisionBlur:
     
     def change_prompt(self):
         """Change the current Gemini prompt"""
-        print(f"\n🔄 Current prompt: '{self.current_prompt}'")
+        print(f"\nCurrent prompt: '{self.current_prompt}'")
         print("Example prompts:")
         print("• 'detect and blur all faces'")
         print("• 'find and blur ID cards and passports'")
@@ -435,7 +435,7 @@ class GeminiVisionBlur:
         new_prompt = input("Enter new prompt (or press Enter to keep current): ").strip()
         if new_prompt:
             self.current_prompt = new_prompt
-            print(f"✅ Changed prompt to: '{self.current_prompt}'")
+            print(f"Changed prompt to: '{self.current_prompt}'")
             # Clear cache when prompt changes
             self.detection_cache.clear()
     
@@ -444,13 +444,13 @@ class GeminiVisionBlur:
         if not self.recording:
             self.recording = True
             self.recorded_frames = []
-            print(f"🎬 Started recording")
+            print(f"Started recording")
     
     def stop_recording(self):
         """Stop recording and save video"""
         if self.recording:
             self.recording = False
-            print(f"⏹️  Stopped recording. Frames captured: {len(self.recorded_frames)}")
+            print(f"Stopped recording. Frames captured: {len(self.recorded_frames)}")
             
             if self.recorded_frames:
                 self.save_recorded_video()
@@ -473,7 +473,7 @@ class GeminiVisionBlur:
             out.write(frame)
         
         out.release()
-        print(f"💾 Saved recording: {filename}")
+        print(f"Saved recording: {filename}")
         
         # Clear recorded frames
         self.recorded_frames = []
@@ -497,14 +497,14 @@ class GeminiVisionBlur:
 def main():
     blur_system = GeminiVisionBlur()
     
-    print("🤖 Gemini-Powered Blur System")
+    print("Gemini-Powered Blur System")
     print("=" * 40)
     print("This system uses Gemini API for intelligent content detection")
     print("and applies OpenCV blurring to sensitive regions.")
     print()
     
     if not blur_system.api_key:
-        print("❌ No Gemini API key found!")
+        print("No Gemini API key found!")
         print("Please add your Gemini API key to the .env file:")
         print("GENAPI_API_KEY=your_gemini_api_key_here")
         return
@@ -514,12 +514,12 @@ def main():
     if initial_prompt:
         blur_system.current_prompt = initial_prompt
     
-    print(f"🎯 Starting with prompt: '{blur_system.current_prompt}'")
+    print(f"Starting with prompt: '{blur_system.current_prompt}'")
     print("Controls:")
-    print("• Q: Quit")
-    print("• P: Change prompt")
-    print("• R: Start recording")
-    print("• S: Stop recording")
+    print("- Q: Quit")
+    print("- P: Change prompt")
+    print("- R: Start recording")
+    print("- S: Stop recording")
     print()
     
     # Start the Gemini stream
@@ -527,13 +527,13 @@ def main():
     
     # Show summary when done
     summary = blur_system.get_detection_summary()
-    print(f"\n📊 Detection Summary:")
+    print(f"\nDetection Summary:")
     print(f"   Total frames processed: {summary['total_frames']}")
     print(f"   Final prompt: '{summary['current_prompt']}'")
     print(f"   Total detections:")
     for detection_type, count in summary['detection_stats'].items():
         if count > 0:
-            print(f"     • {detection_type}: {count}")
+            print(f"     - {detection_type}: {count}")
 
 if __name__ == "__main__":
     main() 

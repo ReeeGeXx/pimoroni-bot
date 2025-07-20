@@ -1,28 +1,79 @@
-# Pimoroni Bot - Embedded Robot Video System
+# Post Guardian & Pimoroni Bot: AI-Powered Privacy Protection
 
-This project is designed for a Raspberry Pi-based Pimoroni Trilobot robot. It provides:
-- Robot movement control (from the web UI)
-- Live video streaming from the Pi camera
-- Real-time blurring of detected faces in the video stream
-- Optionally, prompt-based blurring using an API (e.g., TwelveLabs)
-- Modular code for easy maintenance and extension
+## System Overview
+
+**Post Guardian** is a dual-system project for privacy and content risk protection, powered by state-of-the-art AI APIs:
+
+- **1. Chrome Extension (Post Guardian):**
+  - Real-time privacy/content risk feedback for social media posts (e.g., Twitter/X)
+  - Uses **TwelveLabs** and **Google Gemini Gen API** for advanced, multimodal detection of risky or sensitive content
+- **2. Robot CV System (Pimoroni Bot):**
+  - Raspberry Pi-based robot with live video streaming, remote control, and AI-powered privacy-preserving video blurring
+  - Uses **Google Gemini Gen API** for intelligent, context-aware detection and blurring of sensitive content in video streams
+
+---
 
 ## Project Structure
 
-- `pimoroni_bot/` - Main Python package with all core logic
-    - `robot.py` - Robot (Trilobot) control logic
-    - `video_stream.py` - Video streaming, Flask server, robot endpoints, and blurring logic
-    - `blur.py` - Real-time blurring/detection logic (OpenCV)
-    - `config.py` - Centralized configuration (loads from `.env`)
-- `scripts/` - Standalone scripts for running or testing features
-    - `robot_livestream_blur.py` - Main entry point for robot mode (move, stream, blur, UI)
-    - `auto_blur_pipeline.py`, `robot_record_and_upload.py`, etc. - Other scripts for experiments or batch processing
-- `web/` - Web UI assets (if needed)
-    - `static/` - Static files (JS, CSS)
-    - `templates/` - HTML templates
-- `requirements.txt` - Python dependencies
-- `README.md` - This documentation
-- `.env` - Environment variables (API keys, etc.)
+- `frontend/` — Chrome extension (Post Guardian) for real-time privacy risk feedback on social media.
+    - `src/` — Main extension source code (content scripts, config, manifest, popup).
+    - `dist/` — Built extension for loading into Chrome.
+    - `README.md` — Extension-specific documentation.
+- `pimoroni_bot/` — Embedded robot CV system for live video streaming, AI-powered blurring, and robot control.
+    - `video_stream.py` — Flask server, video streaming, robot endpoints.
+    - `gemini_vision_blur_system.py` — **Gemini Vision Blur System** (AI-powered blurring with Gemini Gen API).
+    - `robot.py` — Robot control logic.
+    - `blur.py`, `config.py` — Blurring and configuration utilities.
+- `web/` — Web UI assets for the robot system.
+- `scripts/` — Standalone scripts for experiments and batch processing.
+- `requirements.txt` — Python dependencies for the robot system.
+- `README.md` — This documentation.
+
+---
+
+## AI APIs Used
+
+- **TwelveLabs API:**
+  - Used in the Chrome extension for advanced video and text content analysis, especially for detecting risky or sensitive information in social media posts.
+- **Google Gemini Gen API:**
+  - Used in both the Chrome extension and the Robot CV system for AI-powered, context-aware detection and blurring of sensitive content in text and video streams.
+
+---
+
+## System Details
+
+### 1. Chrome Extension: Post Guardian
+
+- **Purpose:** Real-time privacy and content risk feedback as users compose posts on platforms like Twitter/X.
+- **Features:**
+  - Real-time text and video analysis using **TwelveLabs** and **Gemini Gen API**
+  - Multimodal detection of risky keywords, phrases, and visuals
+  - Color-coded risk banners and actionable recommendations
+  - Minimal data sent to API, no permanent storage
+- **How to Use:**
+  - See `frontend/README.md` for full setup and usage instructions.
+
+### 2. Robot CV System: Pimoroni Bot
+
+- **Purpose:** Embedded robot system for live video streaming, AI-powered blurring, and remote robot control.
+- **Blurring Mode:**
+  - **Gemini Vision Blur System (`gemini_vision_blur_system.py`):**
+    - AI-powered detection and blurring using **Google Gemini Gen API**.
+    - Detects faces, ID cards, documents, and other sensitive content based on user prompt.
+    - Context-aware and highly flexible; fallback to local detection if API fails (for robustness, but not the main pitch).
+- **How to Use:**
+  - Install Python dependencies (`pip3 install -r requirements.txt`).
+  - Run the main script (`python3 scripts/robot_livestream_blur.py`).
+  - Access the web UI on your network to control the robot and view the live, blurred video stream.
+
+---
+
+## Module Pitches
+
+### Gemini Vision Blur System (`gemini_vision_blur_system.py`)
+An advanced, AI-powered content detection and blurring engine for video streams. Uses **Google’s Gemini Gen API** to intelligently analyze each frame and identify sensitive content—including faces, ID cards, documents, and more—based on a customizable prompt. Provides context-aware, precise blurring and can fall back to local detection if needed.
+
+---
 
 ## How to Run (on the Pi)
 
@@ -44,13 +95,13 @@ This project is designed for a Raspberry Pi-based Pimoroni Trilobot robot. It pr
 ## Web UI Features
 - **Live video stream:** See what the robot sees in real time.
 - **Robot controls:** Use the Forward, Left, Right, and Stop buttons to control the robot from your browser.
-- **Blur prompt:** Enter a custom prompt (e.g., "license plates") to use API-based detection and blurring. Leave blank to use fast, local face blurring.
-- **Detection mode indicator:** Shows whether local or API-based detection is active.
+- **Blur prompt:** Enter a custom prompt (e.g., "ID cards, faces") to use Gemini Gen API-based detection and blurring.
+- **Detection mode indicator:** Shows whether Gemini Gen API-based detection is active.
 
 ## Notes
 - The robot will move as commanded from the UI.
-- The video stream is blurred in real time using OpenCV face detection by default.
-- If a prompt is set, the system will attempt to use API-based detection (see code for integration details).
+- The video stream is blurred in real time using Gemini Gen API-powered detection by default.
+- If a prompt is set, the system will use Gemini Gen API-based detection (see code for integration details).
 - If the Trilobot hardware is not detected, the code will run in simulated mode (no movement).
 - All configuration (API keys, backend URLs, etc.) can be set in the `.env` file or in `pimoroni_bot/config.py`.
 
@@ -109,16 +160,15 @@ This section documents all the real-world issues and fixes encountered to get th
 The project includes integration with the TwelveLabs API for video analysis. **Note: The API structure has changed significantly, and the upload endpoint is currently not available through the API.** 
 
 ### Current Status:
-- ✅ **API Key Authentication**: Working correctly
-- ✅ **Index Management**: Can retrieve and use existing indexes
-- ✅ **Video Analysis**: Can analyze existing videos in the index
-- ✅ **Search Functionality**: Can perform visual search queries
-- ❌ **Video Upload**: Currently not available through API (use TwelveLabs dashboard)
+- API Key Authentication: Working correctly
+- Index Management: Can retrieve and use existing indexes
+- Video Analysis: Can analyze existing videos in the index
+- Search Functionality: Can perform visual search queries
 
 ### How to Use:
-1. **Upload Videos**: Upload videos through the TwelveLabs dashboard at https://app.twelvelabs.io/
-2. **Analysis**: The system will analyze the most recent video in your default index
-3. **Search**: Use the "Record & Analyze" button in the web UI to perform analysis
+1. Upload Videos: Upload videos through the TwelveLabs dashboard at https://app.twelvelabs.io/
+2. Analysis: The system will analyze the most recent video in your default index
+3. Search: Use the "Record & Analyze" button in the web UI to perform analysis
 
 ### API Configuration:
 - Set your TwelveLabs API key in the `.env` file:
