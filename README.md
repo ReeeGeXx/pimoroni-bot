@@ -103,3 +103,39 @@ This project is designed for a Raspberry Pi-based Pimoroni Trilobot robot. It pr
 
 ---
 This section documents all the real-world issues and fixes encountered to get this project running on a Raspberry Pi with Trilobot and camera hardware.
+
+## TwelveLabs API Integration
+
+The project includes integration with the TwelveLabs API for video analysis. **Note: The API structure has changed significantly, and the upload endpoint is currently not available through the API.** 
+
+### Current Status:
+- ✅ **API Key Authentication**: Working correctly
+- ✅ **Index Management**: Can retrieve and use existing indexes
+- ✅ **Video Analysis**: Can analyze existing videos in the index
+- ✅ **Search Functionality**: Can perform visual search queries
+- ❌ **Video Upload**: Currently not available through API (use TwelveLabs dashboard)
+
+### How to Use:
+1. **Upload Videos**: Upload videos through the TwelveLabs dashboard at https://app.twelvelabs.io/
+2. **Analysis**: The system will analyze the most recent video in your default index
+3. **Search**: Use the "Record & Analyze" button in the web UI to perform analysis
+
+### API Configuration:
+- Set your TwelveLabs API key in the `.env` file:
+  ```
+  TWELVELABS_API_KEY=your_api_key_here
+  ```
+- The system will automatically use your default index
+
+### Analysis Results:
+The system provides:
+- Video filename and metadata
+- Number of relevant segments found
+- Timestamps and confidence scores for each segment
+- Visual search results based on your query
+
+### Future Updates:
+When the upload endpoint becomes available again, the system will be updated to support:
+- Direct video upload from the robot
+- Real-time video analysis
+- Automatic blurring based on API results

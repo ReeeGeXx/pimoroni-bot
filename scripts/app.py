@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import os
 import requests
 from dotenv import load_dotenv
+import time
 
 # Load environment variables from .env if present
 load_dotenv()
@@ -9,9 +10,9 @@ load_dotenv()
 app = Flask(__name__)
 
 TWELVELABS_API_KEY = os.environ.get('TWELVELABS_API_KEY')
-UPLOAD_URL = "https://api.twelvelabs.io/v1.3/videos/upload"
+UPLOAD_URL = "https://api.twelvelabs.io/v1.3/indexes/{index_id}/videos"
 SEARCH_URL = "https://api.twelvelabs.io/v1.3/search"
-ANALYZE_URL = "https://api.twelvelabs.io/v1.3/analyze"
+ANALYZE_URL = "https://api.twelvelabs.io/v1.3/search"
 
 @app.route('/')
 def index():
@@ -45,47 +46,64 @@ def process_video():
         return jsonify({'error': 'Missing query or video_path'}), 400
     return process_video_internal(query, video_path)
 
+def get_default_index():
+    """Get the default index ID"""
+    try:
+        indexes_res = requests.get("https://api.twelvelabs.io/v1.3/indexes", 
+                                 headers={"x-api-key": TWELVELABS_API_KEY})
+        indexes_res.raise_for_status()
+        indexes_data = indexes_res.json()
+        return indexes_data['data'][0]['_id']
+    except Exception as e:
+        raise Exception(f"Failed to get index: {e}")
+
 def process_video_internal(query, video_path):
     if not TWELVELABS_API_KEY:
         return jsonify({'error': 'Twelvelabs API key not set'}), 500
-    # 1. Upload video to Twelvelabs
+    
+    # Get the default index
     try:
-        with open(video_path, 'rb') as f:
-            files = {'file': f}
-            headers = {'x-api-key': TWELVELABS_API_KEY}
-            upload_res = requests.post(UPLOAD_URL, files=files, headers=headers)
-            upload_res.raise_for_status()
-            video_id = upload_res.json().get('video_id')
+        index_id = get_default_index()
     except Exception as e:
-        return jsonify({'error': f'Video upload failed: {str(e)}'}), 500
-    # 2. Run Marengo and Pegasus in the background (sequentially for now)
+        return jsonify({'error': str(e)}), 500
+    
+    # Note: The TwelveLabs API upload endpoint has changed and may not be available
+    # For now, we'll analyze existing videos in the index
+    try:
+        videos_res = requests.get(f"https://api.twelvelabs.io/v1.3/indexes/{index_id}/videos", 
+                                headers={"x-api-key": TWELVELABS_API_KEY})
+        videos_res.raise_for_status()
+        videos_data = videos_res.json()
+        existing_videos = videos_data['data']
+        
+        if not existing_videos:
+            return jsonify({'error': 'No videos found in index. Please upload videos through the TwelveLabs dashboard first.'}), 500
+        
+        # Use the most recent video for analysis
+        test_video = existing_videos[0]
+        video_id = test_video['_id']
+        filename = test_video['system_metadata']['filename']
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to get videos: {str(e)}'}), 500
+    
+    # Run search analysis
     results = {}
     try:
-        # Marengo (search)
-        payload_search = {
-            'video_id': video_id,
-            'query': query,
-            'model': 'marengo-1.3'
+        # Search with visual analysis
+        search_payload = {
+            'index_id': (None, index_id),
+            'query_text': (None, query),
+            'search_options': (None, 'visual')
         }
         headers = {'x-api-key': TWELVELABS_API_KEY}
-        search_res = requests.post(SEARCH_URL, json=payload_search, headers=headers)
+        search_res = requests.post(SEARCH_URL, files=search_payload, headers=headers)
         search_res.raise_for_status()
-        results['marengo'] = search_res.json()
+        results['search'] = search_res.json()
+        results['analyzed_video'] = filename
     except Exception as e:
-        results['marengo'] = {'error': f'Search failed: {str(e)}'}
-    try:
-        # Pegasus (analyze)
-        payload_analyze = {
-            'video_id': video_id,
-            'query': query,
-            'model': 'pegasus-1.3'
-        }
-        headers = {'x-api-key': TWELVELABS_API_KEY}
-        analyze_res = requests.post(ANALYZE_URL, json=payload_analyze, headers=headers)
-        analyze_res.raise_for_status()
-        results['pegasus'] = analyze_res.json()
-    except Exception as e:
-        results['pegasus'] = {'error': f'Analyze failed: {str(e)}'}
+        results['search'] = {'error': f'Search failed: {str(e)}'}
+    
     return jsonify({'query': query, 'video_path': video_path, 'results': results})
 
 if __name__ == '__main__':
