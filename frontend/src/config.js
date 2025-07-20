@@ -4,7 +4,7 @@
 const PostGuardianConfig = {
     // Your Gemini API key - get one from https://makersuite.google.com/app/apikey
     //The API key will be injected by webpack during build
-    GEMINI_API_KEY: 'AIzaSyAVHVflBAbDxsyhd6O-Ys_5A73ByAYX5OM',
+    GEMINI_API_KEY: 'AIzaSyCn0EamibbU1b6O0izrJF5xDCeCCoNVHLc',
     
     // Gemini model to use
     GEMINI_MODEL: 'gemini-1.5-flash',
