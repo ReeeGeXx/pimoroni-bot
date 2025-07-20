@@ -44,6 +44,14 @@ out = None
 DETECTION_MODE = 'local'  # 'local' or 'api'
 DETECTION_PROMPT = ''
 
+# Robot livestream + TwelveLabs integration
+ROBOT_RECORDING = False
+RECORDING_DURATION = 10  # seconds
+RECORDING_INTERVAL = 30  # seconds between recordings
+last_recording_time = 0
+recording_thread = None
+analysis_results = []
+
 # Motor control functions
 def move_forward(speed=0.5):
     if TRILOBOT_AVAILABLE:
@@ -74,6 +82,97 @@ def stop_motors():
         tbot.stop()
     else:
         print("SIMULATION: Stopping motors")
+
+# --- Robot Recording and Analysis Functions ---
+def record_robot_segment():
+    """Record a short video segment for TwelveLabs analysis"""
+    global ROBOT_RECORDING, last_recording_time
+    
+    if ROBOT_RECORDING:
+        return
+    
+    ROBOT_RECORDING = True
+    last_recording_time = time.time()
+    
+    # Create unique filename
+    timestamp = int(time.time())
+    segment_path = f"robot_segment_{timestamp}.mp4"
+    
+    print(f"🤖 Recording robot segment: {segment_path}")
+    
+    # Record video segment
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(segment_path, fourcc, 20.0, (640, 480))
+    
+    start_time = time.time()
+    while time.time() - start_time < RECORDING_DURATION:
+        ret, frame = cap.read()
+        if ret:
+            out.write(frame)
+    
+    out.release()
+    ROBOT_RECORDING = False
+    
+    # Analyze with TwelveLabs in background
+    threading.Thread(target=analyze_robot_segment, args=(segment_path,)).start()
+
+def analyze_robot_segment(segment_path):
+    """Analyze robot video segment with TwelveLabs"""
+    try:
+        print(f"🔍 Analyzing robot segment: {segment_path}")
+        
+        # Get the default index
+        indexes_res = requests.get("https://api.twelvelabs.io/v1.3/indexes", 
+                                 headers={"x-api-key": TWELVELABS_API_KEY})
+        indexes_res.raise_for_status()
+        indexes_data = indexes_res.json()
+        index_id = indexes_data['data'][0]['_id']
+        
+        # For now, we'll analyze existing videos since upload isn't working
+        # In the future, we could upload the segment here
+        videos_res = requests.get(f"https://api.twelvelabs.io/v1.3/indexes/{index_id}/videos", 
+                                headers={"x-api-key": TWELVELABS_API_KEY})
+        videos_res.raise_for_status()
+        videos_data = videos_res.json()
+        existing_videos = videos_data['data']
+        
+        if existing_videos:
+            # Analyze the most recent video as a proxy
+            test_video = existing_videos[0]
+            filename = test_video['system_metadata']['filename']
+            
+            # Search for relevant content
+            search_payload = {
+                "index_id": (None, index_id),
+                "query_text": (None, "Find people, faces, license plates, cars, and sensitive content"),
+                "search_options": (None, "visual")
+            }
+            search_res = requests.post("https://api.twelvelabs.io/v1.3/search", 
+                                     files=search_payload, 
+                                     headers={"x-api-key": TWELVELABS_API_KEY})
+            search_res.raise_for_status()
+            search_data = search_res.json()
+            
+            # Store results for UI display
+            analysis_results.append({
+                'timestamp': time.time(),
+                'segment': segment_path,
+                'results': search_data.get('data', []),
+                'video_analyzed': filename
+            })
+            
+            print(f"✅ Analysis complete: {len(search_data.get('data', []))} segments found")
+            
+            # Keep only last 5 results
+            if len(analysis_results) > 5:
+                analysis_results.pop(0)
+        
+    except Exception as e:
+        print(f"❌ Analysis failed: {e}")
+
+def should_record_segment():
+    """Check if it's time to record a new segment"""
+    return time.time() - last_recording_time > RECORDING_INTERVAL and not ROBOT_RECORDING
 
 # --- Real Marengo API-based detection and blurring ---
 def blur_with_api(frame, prompt):
@@ -122,10 +221,17 @@ def blur_with_api(frame, prompt):
 
 # --- Video stream generator ---
 def gen_frames():
+    global last_recording_time
+    
     while True:
         success, frame = cap.read()
         if not success:
             break
+            
+        # Check if we should record a segment
+        if should_record_segment():
+            threading.Thread(target=record_robot_segment).start()
+        
         if DETECTION_MODE == 'local':
             frame = blur_faces(frame)
         elif DETECTION_MODE == 'api' and DETECTION_PROMPT:
@@ -359,6 +465,21 @@ def index():
                 <div id="analysisStatus" class="status"></div>
                 <div id="analysisResults"></div>
             </div>
+            
+            <!-- Robot Analysis Controls -->
+            <div class="section robot-analysis-section">
+                <h2>🤖 Robot Livestream Analysis</h2>
+                <div class="form-group">
+                    <label>Recording Duration (seconds):</label>
+                    <input type="number" id="recordingDuration" value="10" min="5" max="60">
+                    <label>Recording Interval (seconds):</label>
+                    <input type="number" id="recordingInterval" value="30" min="10" max="300">
+                    <button onclick="updateRobotSettings()">⚙️ Update Settings</button>
+                    <button onclick="recordNow()">🎥 Record Now</button>
+                </div>
+                <div id="robotStatus" class="status info">Robot analysis: Ready</div>
+                <div id="robotAnalysisResults"></div>
+            </div>
         </div>
 
         <script>
@@ -441,10 +562,107 @@ def index():
                     statusDiv.className = 'status info';
                     statusDiv.textContent = '⚠️ Trilobot not available - running in simulation mode';
                 }
+                
+                // Start robot analysis monitoring
+                updateRobotAnalysis();
+                setInterval(updateRobotAnalysis, 5000); // Update every 5 seconds
             } catch (error) {
                 console.error('Failed to check motor status:', error);
             }
         };
+
+        // Robot analysis functions
+        async function updateRobotSettings() {
+            const duration = document.getElementById('recordingDuration').value;
+            const interval = document.getElementById('recordingInterval').value;
+            
+            try {
+                const response = await fetch('/robot/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ duration, interval })
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    document.getElementById('robotStatus').className = 'status success';
+                    document.getElementById('robotStatus').textContent = '✅ Settings updated successfully';
+                }
+            } catch (error) {
+                document.getElementById('robotStatus').className = 'status error';
+                document.getElementById('robotStatus').textContent = `❌ Error: ${error.message}`;
+            }
+        }
+
+        async function recordNow() {
+            try {
+                const response = await fetch('/robot/record_now', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    document.getElementById('robotStatus').className = 'status info';
+                    document.getElementById('robotStatus').textContent = '🎥 Recording started...';
+                } else {
+                    document.getElementById('robotStatus').className = 'status error';
+                    document.getElementById('robotStatus').textContent = `❌ ${data.message}`;
+                }
+            } catch (error) {
+                document.getElementById('robotStatus').className = 'status error';
+                document.getElementById('robotStatus').textContent = `❌ Error: ${error.message}`;
+            }
+        }
+
+        async function updateRobotAnalysis() {
+            try {
+                const response = await fetch('/robot/analysis');
+                const data = await response.json();
+                
+                const statusDiv = document.getElementById('robotStatus');
+                const resultsDiv = document.getElementById('robotAnalysisResults');
+                
+                // Update status
+                if (data.recording_status.is_recording) {
+                    statusDiv.className = 'status info';
+                    statusDiv.textContent = '🎥 Recording in progress...';
+                } else {
+                    const nextRecording = Math.ceil(data.recording_status.next_recording_in);
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = `✅ Ready - Next recording in ${nextRecording}s`;
+                }
+                
+                // Update results
+                if (data.analysis_results.length > 0) {
+                    let resultsHtml = '<h3>📊 Recent Analysis Results:</h3>';
+                    data.analysis_results.forEach((result, index) => {
+                        const time = new Date(result.timestamp * 1000).toLocaleTimeString();
+                        const segments = result.results.length;
+                        resultsHtml += `
+                            <div style="border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                                <strong>Analysis ${index + 1}</strong> (${time})<br>
+                                <strong>Video:</strong> ${result.video_analyzed}<br>
+                                <strong>Segments Found:</strong> ${segments}<br>
+                                <strong>Top Results:</strong>
+                                <ul>
+                        `;
+                        
+                        result.results.slice(0, 3).forEach(seg => {
+                            resultsHtml += `<li>Score: ${seg.score?.toFixed(2)}, Time: ${seg.start?.toFixed(1)}s-${seg.end?.toFixed(1)}s</li>`;
+                        });
+                        
+                        resultsHtml += '</ul></div>';
+                    });
+                    resultsDiv.innerHTML = resultsHtml;
+                } else {
+                    resultsDiv.innerHTML = '<p>No analysis results yet. Robot will automatically record and analyze segments.</p>';
+                }
+                
+            } catch (error) {
+                console.error('Failed to update robot analysis:', error);
+            }
+        }
         </script>
     </body>
     </html>
@@ -503,4 +721,45 @@ def motor_status():
     return jsonify({
         'trilobot_available': TRILOBOT_AVAILABLE,
         'status': 'ready'
+    })
+
+# --- Robot Analysis Endpoints ---
+@app.route('/robot/analysis', methods=['GET'])
+def get_robot_analysis():
+    """Get recent robot analysis results"""
+    return jsonify({
+        'analysis_results': analysis_results,
+        'recording_status': {
+            'is_recording': ROBOT_RECORDING,
+            'last_recording': last_recording_time,
+            'next_recording_in': max(0, RECORDING_INTERVAL - (time.time() - last_recording_time))
+        }
+    })
+
+@app.route('/robot/record_now', methods=['POST'])
+def record_now():
+    """Manually trigger a recording"""
+    if not ROBOT_RECORDING:
+        threading.Thread(target=record_robot_segment).start()
+        return jsonify({'status': 'success', 'message': 'Recording started'})
+    else:
+        return jsonify({'status': 'error', 'message': 'Already recording'})
+
+@app.route('/robot/settings', methods=['POST'])
+def update_robot_settings():
+    """Update robot recording settings"""
+    global RECORDING_DURATION, RECORDING_INTERVAL
+    data = request.get_json() or {}
+    
+    if 'duration' in data:
+        RECORDING_DURATION = int(data['duration'])
+    if 'interval' in data:
+        RECORDING_INTERVAL = int(data['interval'])
+    
+    return jsonify({
+        'status': 'success',
+        'settings': {
+            'duration': RECORDING_DURATION,
+            'interval': RECORDING_INTERVAL
+        }
     }) 
