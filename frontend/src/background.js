@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             try {
                 // 1) Call Gemini
                 const geminiRes = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyAVHVflBAbDxsyhd6O-Ys_5A73ByAYX5OM`,
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyCn0EamibbU1b6O0izrJF5xDCeCCoNVHLc`,
                     {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
