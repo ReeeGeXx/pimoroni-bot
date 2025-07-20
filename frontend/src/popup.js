@@ -29,4 +29,13 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
     }
+    document.getElementById("analyzeBtn").addEventListener("click", () => {
+        chrome.runtime.sendMessage({ type: 'ANALYZE_VIDEO' }, (response) => {
+            if (response.success) {
+                document.getElementById("result").innerText = JSON.stringify(response.analysis, null, 2);
+            } else {
+                document.getElementById("result").innerText = "Error: " + response.error;
+            }
+        });
+    });
 });

@@ -7,7 +7,7 @@
     "default_popup": "popup.html"
   },
   "permissions": ["scripting", "activeTab", "storage"],
-  "host_permissions": ["https://x.com/*"],
+  "host_permissions": ["https://x.com/*", "http://localhost:5000/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"

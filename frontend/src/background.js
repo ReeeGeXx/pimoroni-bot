@@ -14,21 +14,71 @@ chrome.runtime.onInstalled.addListener((details) => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // TEXT analysis branch
     if (request.type === 'ANALYZE_TEXT') {
         analyzeTextWithGemini(request.data)
             .then(analysis => sendResponse({ success: true, analysis }))
-            .catch(error => {
-                console.error('Analysis failed:', error);
-                sendResponse({ success: false, error: error.message });
-            });
-        return true;
+            .catch(error => sendResponse({ success: false, error: error.message }));
+        return true; // keep port open for async
     }
 
+    // CACHE‑stats branch (sync)
     if (request.type === 'UPDATE_CACHE_STATS') {
         console.log('Cache stats updated:', request.stats);
         sendResponse({ success: true });
+        return false; // sync, no async work
     }
+
+    // VIDEO analysis branch
+    if (request.type === 'ANALYZE_VIDEO') {
+        const tlPrompt = " You are sending a prompt to twelvelabs telling it to find clips for inappropriate content in a video such as middle fingers, bad words (audio or visual), license plates, addresses and what not, be concise";
+        (async () => {
+            try {
+                // 1) Call Gemini
+                const geminiRes = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyAVHVflBAbDxsyhd6O-Ys_5A73ByAYX5OM`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: tlPrompt }] }]
+                        })
+                    }
+                );
+                if (!geminiRes.ok) {
+                    const t = await geminiRes.text();
+                    throw new Error(`Gemini error ${geminiRes.status}: ${t}`);
+                }
+                const geminiJson = await geminiRes.json();
+                const tlResponse = geminiJson.candidates[0].content.parts[0].text.trim();
+
+                // 2) Call your Flask backend
+                const flaskRes = await fetch("http://localhost:5000/analyze-video", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt: tlResponse })
+                });
+                if (!flaskRes.ok) {
+                    const errText = await flaskRes.text();
+                    throw new Error(`Flask error ${flaskRes.status}: ${errText}`);
+                }
+                const analysis = await flaskRes.json();
+                sendResponse({ success: true, analysis });
+            } catch (error) {
+                console.error("ANALYZE_VIDEO failed:", error);
+                sendResponse({ success: false, error: error.message });
+            }
+        })();
+        return true;
+    }
+
+    // default fallback
+    sendResponse({ success: false, error: "Unrecognized request type." });
+    return false;
 });
+
+
+
 
 async function analyzeTextWithGemini(data) {
     const { text, config } = data;
@@ -112,6 +162,7 @@ If no risks are found, return:
 }
 ${userPrompt} ${riskLevelModifier}
 `;
+
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.GEMINI_MODEL}:generateContent?key=${config.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -119,38 +170,6 @@ ${userPrompt} ${riskLevelModifier}
             contents: [{ parts: [{ text: prompt }] }]
         })
     });
-
-    const indexID = '687bcbbc934487793c566db2';
-    const videoID = "687bd58f61fa6d2e4d153e38";
-
-    const tlResponse = await fetch(`https://api.twelvelabs.io/v1.2/videos/${indexID}/${videoID}?embedding_option=visual-text,audio&transcription=true`, {
-        method: "GET",
-        headers: {
-            "x-api-key": config.TL_API_KEY,
-            "Accept": "application/json"
-        }
-    });
-
-    const searchQuery = prompt + "Alter this for a video, look for something along the lines of risky such as inapproriate content, car license plates, house addresses, etc.";
-
-    const searchResponse = await fetch(`https://api.twelvelabs.io/v1/indexes/${indexID}/search`, {
-        method: "POST",
-        headers: {
-            "x-api-key": config.TL_API_KEY,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            query: searchQuery,
-            video_ids: [videoID]
-        })
-    });
-
-    const searchResult = await searchResponse.json();
-    console.log(searchResult);
-
-    const tlData = await tlResponse.json();
-    console.log(tlData);
-
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API request failed: ${response.status} - ${errorText}`);
@@ -180,8 +199,15 @@ ${userPrompt} ${riskLevelModifier}
         console.error('Failed to parse AI response:', aiResponse);
         throw new Error('AI response could not be parsed as JSON');
     }
+
+
 }
 
 chrome.runtime.onStartup.addListener(() => {
     console.log('Post Guardian extension started');
 });
+
+// chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+
+// });
+

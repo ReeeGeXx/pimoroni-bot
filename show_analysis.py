@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
-
 import requests
 import json
+import time
+from requests.exceptions import HTTPError
 import os
 from dotenv import load_dotenv
 
@@ -9,9 +9,41 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TWELVELABS_API_KEY = os.getenv('TWELVELABS_API_KEY')
+def twelvelabs_search(index_id, query, api_key, max_retries=3):
+    """Perform a search against TwelveLabs, retrying on HTTP 429."""
+    payload = {
+        "index_id": (None, index_id),
+        "query_text": (None, query),
+        "search_options": (None, "visual")
+    }
+    headers = {"x-api-key": api_key}
+    backoff = 1
 
-def show_detailed_analysis():
-    """Show detailed analysis results from TwelveLabs API"""
+    for attempt in range(1, max_retries + 1):
+        try:
+            res = requests.post(
+                "https://api.twelvelabs.io/v1.3/search",
+                files=payload,
+                headers=headers
+            )
+            res.raise_for_status()
+            return res.json()
+        except HTTPError as e:
+            # If it’s a rate‑limit and we still have retries left…
+            if res.status_code == 429 and attempt < max_retries:
+                # Honor Retry‑After if present, else use exponential backoff
+                retry_after = int(res.headers.get("Retry-After", backoff))
+                print(f"⚠️ Rate limited. Retrying in {retry_after}s… (attempt {attempt}/{max_retries})")
+                time.sleep(retry_after)
+                backoff *= 2
+            else:
+                # Re‑raise any non‑429 or final‑attempt 429
+                raise
+    # Shouldn’t get here…
+    raise RuntimeError(f"TwelveLabs search failed after {max_retries} attempts")
+
+def show_detailed_analysis(prompt):
+    """Show detailed analysis results from TwelveLabs API based on prompt"""
     if not TWELVELABS_API_KEY:
         print("❌ No API key available")
         return False
@@ -25,9 +57,9 @@ def show_detailed_analysis():
         indexes_res.raise_for_status()
         indexes_data = indexes_res.json()
         index_id = indexes_data['data'][0]['_id']
-        print(f"📋 Using index: {index_id}")
+        print(f"Using index: {index_id}")
     except Exception as e:
-        print(f"❌ Failed to get index: {e}")
+        print(f"Failed to get index: {e}")
         return False
     
     # Step 2: Get existing videos
@@ -47,24 +79,18 @@ def show_detailed_analysis():
         video_id = test_video['_id']
         filename = test_video['system_metadata']['filename']
         duration = test_video['system_metadata']['duration']
-        print(f"📹 Analyzing video: {filename}")
-        print(f"⏱️  Duration: {duration:.2f} seconds")
+        print(f"Analyzing video: {filename}")
+        print(f"⏱Duration: {duration:.2f} seconds")
         
     except Exception as e:
         print(f"❌ Failed to get videos: {e}")
         return False
     
-    # Step 3: Test different search queries
-    queries = [
-        "Find cars and vehicles",
-        "Find people and faces", 
-        "Find license plates",
-        "Find road signs and text",
-        "Find driving scenes"
-    ]
-    
+    # Use the prompt passed as an argument
+    queries = [prompt]
+
     for query in queries:
-        print(f"\n🔍 Query: '{query}'")
+        print(f"\nQuery: '{query}'")
         print("=" * 50)
         
         try:
@@ -99,7 +125,9 @@ def show_detailed_analysis():
             print(f"❌ Search failed: {e}")
     
     print(f"\n🎉 Analysis complete for video: {filename}")
-    return True
+    return filename, duration
 
 if __name__ == "__main__":
-    show_detailed_analysis() 
+    # Example usage - pass your prompt here
+    test_prompt = "Find clips for inappropriate content in a video such as middle fingers, bad words (audio or visual), license plates, addresses and what not"
+    show_detailed_analysis(test_prompt)
