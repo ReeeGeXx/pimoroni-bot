@@ -124,11 +124,7 @@ async function analyzeTextWithGemini(text) {
             }
 
         });
-        const responseTL = await chrome.runtime.sendMessage({ 
-            type: 'ANALYZE_VIDEO', 
-            data: {config} 
-        });
-        console.log('Response from listener:', responseTL);
+
         console.log(text);
 
         if (response.success && response.analysis) {
@@ -699,4 +695,43 @@ function createOverlay(tweetBox, index) {
 
     tweetBox.parentElement?.appendChild(overlay);
     updateOverlay(tweetBox, overlay, null); // Pass null for now, will be updated after analysis
-} 
+}
+
+function watchForFileInput() {
+    document.body.addEventListener("click", async (e) => {
+        // Wait for user to click the media icon
+        setTimeout(async () => {
+            const inputs = document.querySelectorAll('input[type="file"]');
+
+            inputs.forEach((input) => {
+                if (input.dataset.pgIntercepted) return;
+                input.dataset.pgIntercepted = "true";
+
+                input.addEventListener("change", async (e) => {
+                    const files = e.target.files;
+                    if (!files || files.length === 0) return;
+
+                    for (const file of files) {
+                        if (file.type.startsWith("video/")) {
+                            console.log("[Post Guardian] Intercepted video:", file.name);
+
+                            const blobUrl = URL.createObjectURL(file);
+                            console.log(`[Post Guardian] Blob URL: ${blobUrl}`);
+
+                            // Optionally preview the video or upload to backend here
+                        }
+                    }
+                });
+            });
+
+            // Now you can use await safely
+            const responseTL = await chrome.runtime.sendMessage({
+                type: 'ANALYZE_VIDEO',
+                data: { config }
+            });
+            console.log('Response from listener:', responseTL);
+        }, 300);
+    });
+}
+
+watchForFileInput();
