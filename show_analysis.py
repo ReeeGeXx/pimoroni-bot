@@ -8,8 +8,8 @@ load_dotenv()
 
 TWELVELABS_API_KEY = os.getenv('TWELVELABS_API_KEY')
 
-def show_detailed_analysis():
-    """Show detailed analysis results from TwelveLabs API"""
+def show_detailed_analysis(prompt):
+    """Show detailed analysis results from TwelveLabs API based on prompt"""
     if not TWELVELABS_API_KEY:
         print("❌ No API key available")
         return False
@@ -52,15 +52,9 @@ def show_detailed_analysis():
         print(f"❌ Failed to get videos: {e}")
         return False
     
-    # Step 3: Test different search queries
-    queries = [
-        "Find cars and vehicles",
-        "Find people and faces", 
-        "Find license plates",
-        "Find road signs and text",
-        "Find driving scenes"
-    ]
-    
+    # Use the prompt passed as an argument
+    queries = [prompt]
+
     for query in queries:
         print(f"\n🔍 Query: '{query}'")
         print("=" * 50)
@@ -97,7 +91,9 @@ def show_detailed_analysis():
             print(f"❌ Search failed: {e}")
     
     print(f"\n🎉 Analysis complete for video: {filename}")
-    return True
+    return result
 
 if __name__ == "__main__":
-    show_detailed_analysis() 
+    # Example usage - pass your prompt here
+    test_prompt = "Find inappropriate content"
+    show_detailed_analysis(test_prompt)

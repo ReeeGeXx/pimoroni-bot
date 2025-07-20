@@ -142,10 +142,7 @@ ${userPrompt} ${riskLevelModifier}
         if (!parsed.riskLevel || !Array.isArray(parsed.riskyElements)) {
             throw new Error('Invalid response structure from AI');
         }
-        chrome.runtime.sendMessage({
-            type: 'ANALYSIS_COMPLETE',
-            data: parsed
-        });
+
         return parsed;
 
     } catch (err) {
@@ -161,16 +158,26 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.type === 'ANALYZE_VIDEO') {
-        fetch("http://localhost:5000/analyze-video")
-            .then(res => res.json())
-            .then(data => {
-                sendResponse({ success: true, analysis: data });
-            })
-            .catch(error => {
-                console.error("Failed to call Python API:", error);
-                sendResponse({ success: false, error: error.message });
-            });
-        return true; // Required for async sendResponse
-    }
+  if (request.type === 'ANALYZE_VIDEO') {
+    const prompt = " You are sending a prompt to twelvelabs telling it to find clips for inappropriate content in a video such as middle fingers, bad words (audio or visual), license plates, addresses and what not, be concise";
+
+    fetch("http://localhost:5000/analyze-video", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ prompt })
+    })
+      .then(res => res.json())
+      .then(data => {
+        sendResponse({ success: true, analysis: data });
+      })
+      .catch(error => {
+        console.error("Failed to call Python API:", error);
+        sendResponse({ success: false, error: error.message });
+      });
+
+    return true; // keep async response alive
+  }
 });
+

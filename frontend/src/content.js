@@ -113,7 +113,9 @@ async function analyzeTextWithGemini(text) {
 
     cacheManager.stats.apiCalls++;
     console.log(`Making API call #${cacheManager.stats.apiCalls} to Gemini via service worker`);
-
+    const responseTL = await chrome.runtime.sendMessage({ type: 'ANALYZE_VIDEO' }, (responseTL) => {
+        console.log('Response from listener:', responseTL);
+    });
     try {
         // Send message to service worker for API call
         const response = await chrome.runtime.sendMessage({
