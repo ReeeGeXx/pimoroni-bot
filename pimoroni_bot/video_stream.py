@@ -1028,11 +1028,50 @@ def update_robot_settings():
         RECORDING_DURATION = int(data['duration'])
     if 'interval' in data:
         RECORDING_INTERVAL = int(data['interval'])
-    
+
     return jsonify({
         'status': 'success',
         'settings': {
             'duration': RECORDING_DURATION,
             'interval': RECORDING_INTERVAL
         }
-    }) 
+    })
+
+# --- Main application entry point ---
+if __name__ == '__main__':
+    print("🤖 Starting Pimoroni Bot Video Stream Server...")
+    print("=" * 50)
+    print("📹 Video Stream: http://localhost:5000")
+    print("🎮 Robot Controls: Available in web UI")
+    print("🔍 Detection Modes: Local OpenCV, TwelveLabs API, Gemini AI")
+    print("=" * 50)
+    
+    if TRILOBOT_AVAILABLE:
+        print("✅ Trilobot connected and ready")
+    else:
+        print("⚠️  Trilobot not available - running in simulation mode")
+    
+    if GEMINI_AVAILABLE:
+        print("✅ Gemini AI blur system loaded")
+    else:
+        print("⚠️  Gemini AI not available")
+    
+    if TWELVELABS_API_KEY:
+        print("✅ TwelveLabs API key configured")
+    else:
+        print("⚠️  TwelveLabs API key not configured")
+    
+    print("\n🚀 Starting Flask server...")
+    print("📱 Open your browser and go to: http://localhost:5000")
+    print("⏹️  Press Ctrl+C to stop the server")
+    print("=" * 50)
+    
+    try:
+        app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    except KeyboardInterrupt:
+        print("\n⏹️  Shutting down server...")
+        cleanup_motors()
+        print("✅ Server stopped")
+    except Exception as e:
+        print(f"❌ Server error: {e}")
+        cleanup_motors()
