@@ -4,12 +4,12 @@ Post Guardian is a browser extension that uses AI to protect your privacy when p
 
 ## Features
 
-- 🔍 **Real-time Text Analysis**: Monitors your posts as you type
-- 🤖 **AI-Powered Risk Assessment**: Uses Google's Gemini API for intelligent privacy analysis
-- 🎯 **Smart Keyword Detection**: Identifies potentially risky words and phrases
-- 🛡️ **Visual Risk Indicators**: Color-coded banners show risk levels (LOW/MEDIUM/HIGH)
-- 💡 **Actionable Recommendations**: Provides specific suggestions for safer alternatives
-- ⚡ **Performance Optimized**: Debounced API calls to minimize requests
+- Real-time Text Analysis: Monitors your posts as you type
+- AI-Powered Risk Assessment: Uses Google's Gemini API for intelligent privacy analysis
+- Smart Keyword Detection: Identifies potentially risky words and phrases
+- Visual Risk Indicators: Color-coded banners show risk levels (LOW/MEDIUM/HIGH)
+- Actionable Recommendations: Provides specific suggestions for safer alternatives
+- Performance Optimized: Debounced API calls to minimize requests
 
 ## Quick Start
 

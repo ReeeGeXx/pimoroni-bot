@@ -11,7 +11,7 @@ load_dotenv()
 
 def create_test_image():
     """Create a test image with various elements to detect"""
-    print("🎨 Creating test image...")
+    print("Creating test image...")
     
     # Create a test image
     img = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -38,7 +38,7 @@ def create_test_image():
 
 def test_prompt_parsing():
     """Test the prompt parsing functionality"""
-    print("🧪 Testing prompt parsing...")
+    print("Testing prompt parsing...")
     
     # Import the enhanced blur system
     from pimoroni_bot.enhanced_opencv_blur import EnhancedOpenCVBlur
@@ -58,11 +58,11 @@ def test_prompt_parsing():
         detection_types = blur_system.parse_prompt(prompt)
         print(f"   '{prompt}' → {detection_types}")
     
-    print("✅ Prompt parsing test complete!")
+    print("Prompt parsing test complete!")
 
 def test_detection_on_image():
     """Test detection on a test image"""
-    print("🔍 Testing detection on test image...")
+    print("Testing detection on test image...")
     
     # Import the enhanced blur system
     from pimoroni_bot.enhanced_opencv_blur import EnhancedOpenCVBlur
@@ -82,7 +82,7 @@ def test_detection_on_image():
     ]
     
     for i, prompt in enumerate(test_prompts):
-        print(f"\n📝 Testing prompt: '{prompt}'")
+        print(f"\nTesting prompt: '{prompt}'")
         
         # Process image with prompt
         processed_img = blur_system.process_frame_with_prompt(test_img, prompt)
@@ -90,13 +90,13 @@ def test_detection_on_image():
         # Save result
         filename = f"test_result_{i+1}_{prompt.replace(' ', '_')}.jpg"
         cv2.imwrite(filename, processed_img)
-        print(f"   💾 Saved: {filename}")
+        print(f"    Saved: {filename}")
     
-    print("✅ Detection test complete!")
+    print("Detection test complete!")
 
 def test_blur_types():
     """Test different blur types"""
-    print("🎨 Testing different blur types...")
+    print("Testing different blur types...")
     
     # Create a simple test image
     img = np.zeros((200, 200, 3), dtype=np.uint8)
@@ -119,12 +119,12 @@ def test_blur_types():
         # Save result
         filename = f"blur_test_{blur_type}.jpg"
         cv2.imwrite(filename, blurred_img)
-        print(f"   💾 Saved: {filename}")
+        print(f"    Saved: {filename}")
     
-    print("✅ Blur types test complete!")
+    print("Blur types test complete!")
 
 def main():
-    print("🎯 Enhanced OpenCV Blur System Test")
+    print("Enhanced OpenCV Blur System Test")
     print("=" * 50)
     
     print("This test demonstrates the enhanced OpenCV blurring system")
@@ -143,13 +143,13 @@ def main():
     test_blur_types()
     print()
     
-    print("🎉 All tests complete!")
+    print("All tests complete!")
     print()
-    print("📁 Generated files:")
+    print("Generated files:")
     print("• test_result_*.jpg - Detection test results")
     print("• blur_test_*.jpg - Blur type examples")
     print()
-    print("💡 To test with live camera:")
+    print("To test with live camera:")
     print("   python3 pimoroni_bot/enhanced_opencv_blur.py")
     print("   python3 pimoroni_bot/robot_enhanced_blur.py")
 

@@ -27,9 +27,9 @@ try:
     from pimoroni_bot.gemini_vision_blur_system import GeminiVisionBlur
     gemini_blur = GeminiVisionBlur()
     GEMINI_AVAILABLE = True
-    print("✅ Gemini blur system loaded")
+    print("Gemini blur system loaded")
 except ImportError as e:
-    print(f"⚠️  Gemini blur system not available: {e}")
+    print(f"Gemini blur system not available: {e}")
     gemini_blur = None
     GEMINI_AVAILABLE = False
 
@@ -146,7 +146,7 @@ def analyze_robot_segment(segment_path):
         
         # Try to upload the robot's recorded segment
         try:
-            print(f"📤 Uploading robot segment to TwelveLabs...")
+            print(f"Uploading robot segment to TwelveLabs...")
             with open(segment_path, "rb") as f:
                 files = {"video": f}
                 headers = {"x-api-key": TWELVELABS_API_KEY}
@@ -156,7 +156,7 @@ def analyze_robot_segment(segment_path):
                 if upload_res.status_code == 200:
                     upload_data = upload_res.json()
                     video_id = upload_data['data']['_id']
-                    print(f"✅ Upload successful: {video_id}")
+                    print(f"Upload successful: {video_id}")
                     
                     # Wait for indexing
                     print("⏳ Waiting for indexing...")
@@ -202,28 +202,28 @@ def analyze_robot_segment(segment_path):
                             'uploaded_video_id': video_id
                         })
                         
-                        print(f"✅ Analysis complete: {len(search_data.get('data', []))} segments found")
+                        print(f"Analysis complete: {len(search_data.get('data', []))} segments found")
                         
                         # Keep only last 5 results
                         if len(analysis_results) > 5:
                             analysis_results.pop(0)
                     else:
-                        print("❌ Indexing timeout")
+                        print("Indexing timeout")
                         # Fall back to analyzing existing videos
                         analyze_existing_videos(index_id, segment_path)
                         
                 else:
-                    print(f"❌ Upload failed: {upload_res.status_code} - {upload_res.text}")
+                    print(f"Upload failed: {upload_res.status_code} - {upload_res.text}")
                     # Fall back to analyzing existing videos
                     analyze_existing_videos(index_id, segment_path)
                     
         except Exception as e:
-            print(f"❌ Upload failed: {e}")
+            print(f"Upload failed: {e}")
             # Fall back to analyzing existing videos
             analyze_existing_videos(index_id, segment_path)
         
     except Exception as e:
-        print(f"❌ Analysis failed: {e}")
+        print(f"Analysis failed: {e}")
 
 def analyze_existing_videos(index_id, segment_path):
     """Fallback: analyze existing videos when upload fails"""
@@ -1039,39 +1039,39 @@ def update_robot_settings():
 
 # --- Main application entry point ---
 if __name__ == '__main__':
-    print("🤖 Starting Pimoroni Bot Video Stream Server...")
+    print("Starting Pimoroni Bot Video Stream Server...")
     print("=" * 50)
-    print("📹 Video Stream: http://localhost:5000")
-    print("🎮 Robot Controls: Available in web UI")
-    print("🔍 Detection Modes: Local OpenCV, TwelveLabs API, Gemini AI")
+    print("Video Stream: http://localhost:5000")
+    print("Robot Controls: Available in web UI")
+    print("Detection Modes: Local OpenCV, TwelveLabs API, Gemini AI")
     print("=" * 50)
     
     if TRILOBOT_AVAILABLE:
-        print("✅ Trilobot connected and ready")
+        print("Trilobot connected and ready")
     else:
-        print("⚠️  Trilobot not available - running in simulation mode")
+        print("Trilobot not available - running in simulation mode")
     
     if GEMINI_AVAILABLE:
-        print("✅ Gemini AI blur system loaded")
+        print("Gemini AI blur system loaded")
     else:
-        print("⚠️  Gemini AI not available")
+        print("Gemini AI not available")
     
     if TWELVELABS_API_KEY:
-        print("✅ TwelveLabs API key configured")
+        print("TwelveLabs API key configured")
     else:
-        print("⚠️  TwelveLabs API key not configured")
+        print("TwelveLabs API key not configured")
     
-    print("\n🚀 Starting Flask server...")
-    print("📱 Open your browser and go to: http://localhost:5000")
-    print("⏹️  Press Ctrl+C to stop the server")
+    print("\nStarting Flask server...")
+    print("Open your browser and go to: http://localhost:5000")
+    print("Press Ctrl+C to stop the server")
     print("=" * 50)
     
     try:
         app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
     except KeyboardInterrupt:
-        print("\n⏹️  Shutting down server...")
+        print("\nShutting down server...")
         cleanup_motors()
-        print("✅ Server stopped")
+        print("Server stopped")
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        print(f"Server error: {e}")
         cleanup_motors()
