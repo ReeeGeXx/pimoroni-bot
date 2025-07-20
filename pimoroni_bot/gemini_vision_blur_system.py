@@ -47,20 +47,22 @@ class GeminiVisionBlur:
         
         # Cache for API responses to avoid repeated calls
         self.detection_cache = {}
-        self.cache_duration = 2.0  # seconds
+        self.cache_duration = 10.0  #much longer cache
+        self.frame_skip = 60  #Only analyze every 60 frames (2 seconds at 30fps)
+        self.last_analysis_frame = 0
         
     def encode_frame_for_api(self, frame):
         """Encode frame as base64 for API transmission"""
         # Resize frame to reduce API payload size
         height, width = frame.shape[:2]
-        if width > 640:
-            scale = 640 / width
+        if width > 480:  # Smaller size for faster processing
+            scale = 480 / width
             new_width = int(width * scale)
             new_height = int(height * scale)
             frame = cv2.resize(frame, (new_width, new_height))
         
-        # Encode as JPEG
-        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        #Encode as JPEG with lower quality for faster transmission
+        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
         jpg_as_text = base64.b64encode(buffer).decode('utf-8')
         return jpg_as_text
     
@@ -210,25 +212,41 @@ class GeminiVisionBlur:
             'sensitive_content': 0
         }
         
-        # Check cache first
-        cache_key = f"{hash(prompt)}_{self.frame_count // 30}"  # Cache every 30 frames
-        current_time = time.time()
+        # Only analyze every N frames to improve performance
+        should_analyze = (self.frame_count - self.last_analysis_frame) >= self.frame_skip
         
-        if cache_key in self.detection_cache:
-            cache_time, cached_detections = self.detection_cache[cache_key]
-            if current_time - cache_time < self.cache_duration:
-                print(f"📋 Using cached detection for frame {self.frame_count}")
-                blur_regions = self.process_detections(cached_detections, frame.shape)
+        if should_analyze:
+            # Check cache first
+            cache_key = f"{hash(prompt)}_{self.frame_count // 120}"  # Cache every 120 frames (4 seconds)
+            current_time = time.time()
+            
+            if cache_key in self.detection_cache:
+                cache_time, cached_detections = self.detection_cache[cache_key]
+                if current_time - cache_time < self.cache_duration:
+                    print(f"📋 Using cached detection for frame {self.frame_count}")
+                    blur_regions = self.process_detections(cached_detections, frame.shape)
+                else:
+                    # Cache expired, call API
+                    print(f"🔍 Analyzing frame {self.frame_count} with Gemini...")
+                    detections = self.call_gemini_analysis(frame, prompt)
+                    self.detection_cache[cache_key] = (current_time, detections)
+                    blur_regions = self.process_detections(detections, frame.shape)
+                    self.last_analysis_frame = self.frame_count
             else:
-                # Cache expired, call API
+                # No cache, call API
+                print(f"🔍 Analyzing frame {self.frame_count} with Gemini...")
                 detections = self.call_gemini_analysis(frame, prompt)
                 self.detection_cache[cache_key] = (current_time, detections)
                 blur_regions = self.process_detections(detections, frame.shape)
+                self.last_analysis_frame = self.frame_count
         else:
-            # No cache, call API
-            detections = self.call_gemini_analysis(frame, prompt)
-            self.detection_cache[cache_key] = (current_time, detections)
-            blur_regions = self.process_detections(detections, frame.shape)
+            # Use the most recent cached detections
+            cache_key = f"{hash(prompt)}_{(self.frame_count // 120)}"
+            if cache_key in self.detection_cache:
+                _, cached_detections = self.detection_cache[cache_key]
+                blur_regions = self.process_detections(cached_detections, frame.shape)
+            else:
+                blur_regions = []
         
         # Apply blurring to detected regions
         for region in blur_regions:
@@ -249,7 +267,8 @@ class GeminiVisionBlur:
             else:
                 frame_stats['sensitive_content'] += 1
             
-            print(f"   ✅ Blurred {detection_type} (confidence: {confidence:.2f}) at {bbox}")
+            if should_analyze:  # Only print during analysis frames
+                print(f"   ✅ Blurred {detection_type} (confidence: {confidence:.2f}) at {bbox}")
         
         # Update global stats
         for key, value in frame_stats.items():
@@ -340,7 +359,7 @@ class GeminiVisionBlur:
                 elif key == ord('s'):
                     self.stop_recording()
                 
-                time.sleep(0.03)  # ~30 FPS
+                time.sleep(0.01)  # ~100 FPS - much faster
                 
         except KeyboardInterrupt:
             print("\n⏹️  Stopping Gemini stream...")
