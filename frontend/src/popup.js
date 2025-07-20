@@ -1,41 +1,73 @@
-// Popup script for Post Guardian extension
 document.addEventListener('DOMContentLoaded', function () {
     console.log('Post Guardian popup loaded');
 
     const statusElement = document.getElementById('status');
+    const textarea = document.getElementById('userPrompt');
+    const saveButton = document.getElementById('savePrompt');
+    const riskSlider = document.getElementById('riskLevel');
+    const riskLabel = document.getElementById('riskLevelValue');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const resultDisplay = document.getElementById('result');
+
+    // Initial status
     if (statusElement) {
         statusElement.textContent = 'Post Guardian is active!';
     }
 
-    const textarea = document.getElementById('userPrompt');
-    const saveButton = document.getElementById('savePrompt');
+    // Load saved values
+    chrome.storage.local.get(['userCustomPrompt', 'riskLevel'], (result) => {
+        if (result.userCustomPrompt) {
+            textarea.value = result.userCustomPrompt;
+        }
 
-    if (textarea && saveButton) {
-        // Load saved custom prompt
-        chrome.storage.local.get(['userCustomPrompt'], (result) => {
-            if (result.userCustomPrompt) {
-                textarea.value = result.userCustomPrompt;
-            }
-        });
+        const savedRisk = parseInt(result.riskLevel || '3', 10);
+        riskSlider.value = savedRisk;
+        updateRiskLabel(savedRisk);
+    });
 
-        // Save button click
-        saveButton.addEventListener('click', () => {
-            const prompt = textarea.value.trim();
-            chrome.storage.local.set({ userCustomPrompt: prompt }, () => {
-                statusElement.textContent = 'Custom instruction saved!';
-                setTimeout(() => {
-                    statusElement.textContent = 'Post Guardian is active!';
-                }, 2000);
-            });
+    // Update label on slider change
+    riskSlider.addEventListener('input', (e) => {
+        updateRiskLabel(parseInt(e.target.value, 10));
+    });
+
+    // Save config to local storage
+    saveButton.addEventListener('click', () => {
+        const prompt = textarea.value.trim();
+        const risk = parseInt(riskSlider.value, 10);
+
+        chrome.storage.local.set({
+            userCustomPrompt: prompt,
+            riskLevel: risk
+        }, () => {
+            statusElement.textContent = 'Configuration saved!';
+            setTimeout(() => {
+                statusElement.textContent = 'Post Guardian is active!';
+            }, 2000);
         });
-    }
-    document.getElementById("analyzeBtn").addEventListener("click", () => {
+    });
+
+    // Trigger analysis
+    analyzeBtn.addEventListener('click', () => {
         chrome.runtime.sendMessage({ type: 'ANALYZE_VIDEO' }, (response) => {
             if (response.success) {
-                document.getElementById("result").innerText = JSON.stringify(response.analysis, null, 2);
+                resultDisplay.innerText = JSON.stringify(response.analysis, null, 2);
             } else {
-                document.getElementById("result").innerText = "Error: " + response.error;
+                resultDisplay.innerText = "Error: " + response.error;
             }
         });
     });
+
+    // Label formatter
+    function updateRiskLabel(value) {
+        let label = '';
+        switch (value) {
+            case 1: label = '1 - Very Lenient'; break;
+            case 2: label = '2 - Lenient'; break;
+            case 3: label = '3 - Balanced'; break;
+            case 4: label = '4 - Strict'; break;
+            case 5: label = '5 - Very Strict'; break;
+            default: label = `${value}`; break;
+        }
+        riskLabel.textContent = label;
+    }
 });

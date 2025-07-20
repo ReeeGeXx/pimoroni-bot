@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html>
-
 <head>
   <title>Post Guardian Config</title>
   <style>
@@ -50,6 +49,10 @@
       border: 1px solid #ccc;
     }
 
+    .config-tooltip input[type="range"] {
+      width: 100%;
+    }
+
     .config-tooltip button {
       align-self: flex-end;
       padding: 8px 16px;
@@ -70,20 +73,32 @@
       color: #28a745;
       font-weight: 500;
     }
+
+    #riskLevelValue {
+      font-size: 13px;
+      font-weight: 500;
+    }
   </style>
 </head>
 
 <body>
   <div class="config-tooltip">
     <h1>Post Guardian Config</h1>
+
     <label for="userPrompt">Add custom instruction (optional):</label>
     <textarea id="userPrompt" placeholder="e.g., Focus more on financial information."></textarea>
+
+    <label for="riskLevel">Analysis Strictness:</label>
+    <input type="range" id="riskLevel" min="1" max="5" value="3" />
+    <div id="riskLevelValue">3 - Balanced</div>
+
     <button id="savePrompt">Save</button>
     <div id="status" class="status"></div>
   </div>
+
+  <button id="analyzeBtn">Analyze Video</button>
+  <pre id="result"></pre>
+
   <script src="popup.js"></script>
 </body>
-<button id="analyzeBtn">Analyze Video</button>
-<pre id="result"></pre>
-
 </html>
