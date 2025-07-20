@@ -49,15 +49,32 @@ def test_my_video():
             filename = video['system_metadata']['filename']
             duration = video['system_metadata']['duration']
             status = video['hls']['status']
-            print(f"   {i+1}. {filename} ({duration:.1f}s) - Status: {status}")
+            video_id = video['_id']
+            print(f"   {i+1}. {filename} ({duration:.1f}s) - ID: {video_id} - Status: {status}")
         
-        # Use the most recent video (first in list)
-        test_video = existing_videos[0]
+        #Look for specific video
+        target_video_id = "687c3709c5994cb471749bc7"  #video ID
+        target_video = None
+        
+        for video in existing_videos:
+            if video['_id'] == target_video_id:
+                target_video = video
+                break
+        
+        if target_video:
+            test_video = target_video
+            print(f"\n🎯 Found your video: {test_video['system_metadata']['filename']}")
+        else:
+            # Use the most recent video if target not found
+            test_video = existing_videos[0]
+            print(f"\n⚠️  Your video ID not found, using: {test_video['system_metadata']['filename']}")
+        
         video_id = test_video['_id']
         filename = test_video['system_metadata']['filename']
         duration = test_video['system_metadata']['duration']
-        print(f"\n🎯 Analyzing: {filename}")
+        print(f"🎯 Analyzing: {filename}")
         print(f"⏱️  Duration: {duration:.2f} seconds")
+        print(f"🆔 Video ID: {video_id}")
         
     except Exception as e:
         print(f"❌ Failed to get videos: {e}")
