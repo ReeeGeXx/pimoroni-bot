@@ -10,6 +10,7 @@ import base64
 import time
 import re
 import atexit
+import json
 
 # Import Trilobot for motor control
 try:
@@ -20,6 +21,17 @@ except ImportError:
     print("Trilobot not available - motor control will be simulated")
     tbot = None
     TRILOBOT_AVAILABLE = False
+
+# Import Gemini blur system
+try:
+    from pimoroni_bot.gemini_vision_blur_system import GeminiVisionBlur
+    gemini_blur = GeminiVisionBlur()
+    GEMINI_AVAILABLE = True
+    print("✅ Gemini blur system loaded")
+except ImportError as e:
+    print(f"⚠️  Gemini blur system not available: {e}")
+    gemini_blur = None
+    GEMINI_AVAILABLE = False
 
 # Cleanup function to stop motors on exit
 def cleanup_motors():
@@ -41,8 +53,12 @@ RECORD_VIDEO = False
 out = None
 
 # Shared state for prompt and detection mode
-DETECTION_MODE = 'local'  # 'local' or 'api'
+DETECTION_MODE = 'local'  # 'local', 'api', or 'gemini'
 DETECTION_PROMPT = ''
+
+# Gemini blur settings
+GEMINI_PROMPT = "detect and blur faces, IDs, and sensitive documents"
+GEMINI_ENABLED = False
 
 # Robot livestream + TwelveLabs integration
 ROBOT_RECORDING = False
@@ -301,6 +317,20 @@ def blur_with_api(frame, prompt):
         print(f"API error: {e}")
         return frame
 
+def blur_with_gemini(frame, prompt):
+    """Apply Gemini-powered blur to frame"""
+    if not GEMINI_AVAILABLE or not gemini_blur:
+        print("❌ Gemini blur system not available")
+        return frame
+    
+    try:
+        # Process frame with Gemini
+        processed_frame, frame_stats = gemini_blur.process_frame_with_gemini(frame, prompt)
+        return processed_frame
+    except Exception as e:
+        print(f"❌ Gemini blur failed: {e}")
+        return frame
+
 # --- Video stream generator ---
 def gen_frames():
     global last_recording_time
@@ -318,6 +348,8 @@ def gen_frames():
             frame = blur_faces(frame)
         elif DETECTION_MODE == 'api' and DETECTION_PROMPT:
             frame = blur_with_api(frame, DETECTION_PROMPT)
+        elif DETECTION_MODE == 'gemini' and gemini_blur and GEMINI_AVAILABLE:
+            frame = blur_with_gemini(frame, DETECTION_PROMPT)
         if RECORD_VIDEO and out:
             out.write(frame)
         ret, buffer = cv2.imencode('.jpg', frame)
@@ -514,13 +546,19 @@ def index():
     <body>
         <div class="container">
             <h1>🤖 Pimoroni Bot Control</h1>
-            
+
             <!-- Live Video Stream -->
             <div class="section">
                 <h2>📹 Live Video Stream</h2>
                 <div class="video-container">
                     <img src="/video_feed" class="video-feed" alt="Live video feed">
                 </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="section">
+                <h2>⚙️ System Status</h2>
+                <div id="systemStatus" class="status info">Loading system status...</div>
             </div>
             
             <!-- Motor Controls -->
@@ -540,10 +578,18 @@ def index():
             <div class="section analysis-section">
                 <h2>🔍 Video Analysis & Blurring</h2>
                 <div class="form-group">
+                    <label>Detection Mode:</label>
+                    <select id="detectionMode" onchange="updateDetectionMode()">
+                        <option value="local">Local OpenCV</option>
+                        <option value="api">TwelveLabs API</option>
+                        <option value="gemini">Gemini AI</option>
+                    </select>
                     <label>Analysis Prompt:</label>
                     <input type="text" id="blurPrompt" placeholder="e.g. Analyze for faces and license plates">
+                    <button onclick="setPrompt()">🎯 Set Prompt</button>
                     <button onclick="recordAndAnalyze()">🎬 Record & Analyze</button>
                 </div>
+                <div id="detectionStatus" class="status info">Detection mode: Local OpenCV</div>
                 <div id="analysisStatus" class="status"></div>
                 <div id="analysisResults"></div>
             </div>
@@ -592,6 +638,50 @@ def index():
         }
 
         // Analysis functions
+        async function setPrompt() {
+            const mode = document.getElementById('detectionMode').value;
+            const prompt = document.getElementById('blurPrompt').value;
+            const statusDiv = document.getElementById('detectionStatus');
+            
+            try {
+                const response = await fetch('/set_prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode, prompt })
+                });
+                const data = await response.json();
+                
+                if (data.mode === 'gemini' && !data.gemini_available) {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ Gemini blur system not available';
+                    return;
+                }
+                
+                statusDiv.className = 'status success';
+                statusDiv.textContent = `✅ Detection mode: ${data.mode.toUpperCase()}${data.prompt ? ' - ' + data.prompt : ''}`;
+                
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `❌ Error: ${error.message}`;
+            }
+        }
+
+        function updateDetectionMode() {
+            const mode = document.getElementById('detectionMode').value;
+            const statusDiv = document.getElementById('detectionStatus');
+            
+            if (mode === 'gemini') {
+                statusDiv.className = 'status info';
+                statusDiv.textContent = '🤖 Gemini AI mode selected - Set prompt and click "Set Prompt" to activate';
+            } else if (mode === 'api') {
+                statusDiv.className = 'status info';
+                statusDiv.textContent = '🔍 TwelveLabs API mode selected - Set prompt and click "Set Prompt" to activate';
+            } else {
+                statusDiv.className = 'status info';
+                statusDiv.textContent = '📹 Local OpenCV mode selected - Basic face detection active';
+            }
+        }
+
         async function recordAndAnalyze() {
             const statusDiv = document.getElementById('analysisStatus');
             const resultsDiv = document.getElementById('analysisResults');
@@ -645,13 +735,83 @@ def index():
                     statusDiv.textContent = '⚠️ Trilobot not available - running in simulation mode';
                 }
                 
+                // Check Gemini availability
+                const promptResponse = await fetch('/set_prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: 'local', prompt: '' })
+                });
+                const promptData = await promptResponse.json();
+                
+                if (!promptData.gemini_available) {
+                    const geminiOption = document.querySelector('#detectionMode option[value="gemini"]');
+                    if (geminiOption) {
+                        geminiOption.disabled = true;
+                        geminiOption.text = 'Gemini AI (Not Available)';
+                    }
+                }
+                
+                // Update system status
+                updateSystemStatus();
+                
                 // Start robot analysis monitoring
                 updateRobotAnalysis();
                 setInterval(updateRobotAnalysis, 5000); // Update every 5 seconds
+                setInterval(updateSystemStatus, 10000); // Update system status every 10 seconds
             } catch (error) {
                 console.error('Failed to check motor status:', error);
             }
         };
+
+        async function updateSystemStatus() {
+            try {
+                const response = await fetch('/system/status');
+                const data = await response.json();
+                const statusDiv = document.getElementById('systemStatus');
+                
+                let statusHtml = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">';
+                
+                // Hardware status
+                statusHtml += '<div>';
+                statusHtml += '<strong>Hardware:</strong><br>';
+                statusHtml += data.trilobot_available ? '✅ Trilobot Ready' : '⚠️ Trilobot (Simulation)';
+                statusHtml += '</div>';
+                
+                // AI Services status
+                statusHtml += '<div>';
+                statusHtml += '<strong>AI Services:</strong><br>';
+                statusHtml += data.gemini_available ? '✅ Gemini AI' : '❌ Gemini AI';
+                statusHtml += data.twelvelabs_available ? ' | ✅ TwelveLabs' : ' | ❌ TwelveLabs';
+                statusHtml += '</div>';
+                
+                // Detection status
+                statusHtml += '<div>';
+                statusHtml += '<strong>Detection Mode:</strong><br>';
+                statusHtml += `${data.detection_mode.toUpperCase()}${data.detection_prompt ? ' - ' + data.detection_prompt : ''}`;
+                statusHtml += '</div>';
+                
+                // Recording status
+                statusHtml += '<div>';
+                statusHtml += '<strong>Robot Recording:</strong><br>';
+                if (data.recording_status.is_recording) {
+                    statusHtml += '🎥 Recording...';
+                } else {
+                    const nextRec = Math.ceil(data.recording_status.next_recording_in);
+                    statusHtml += `⏰ Next in ${nextRec}s`;
+                }
+                statusHtml += '</div>';
+                
+                statusHtml += '</div>';
+                
+                statusDiv.innerHTML = statusHtml;
+                statusDiv.className = 'status success';
+                
+            } catch (error) {
+                console.error('Failed to update system status:', error);
+                document.getElementById('systemStatus').className = 'status error';
+                document.getElementById('systemStatus').textContent = '❌ Failed to load system status';
+            }
+        }
 
         // Robot analysis functions
         async function updateRobotSettings() {
@@ -765,13 +925,19 @@ def set_prompt():
     global DETECTION_MODE, DETECTION_PROMPT
     data = request.get_json()
     prompt = data.get('prompt', '').strip()
-    if prompt:
+    mode = data.get('mode', 'local')
+    
+    if mode == 'gemini' and GEMINI_AVAILABLE:
+        DETECTION_MODE = 'gemini'
+        DETECTION_PROMPT = prompt or GEMINI_PROMPT
+    elif mode == 'api':
         DETECTION_MODE = 'api'
         DETECTION_PROMPT = prompt
     else:
         DETECTION_MODE = 'local'
         DETECTION_PROMPT = ''
-    return jsonify({'mode': DETECTION_MODE, 'prompt': DETECTION_PROMPT})
+    
+    return jsonify({'mode': DETECTION_MODE, 'prompt': DETECTION_PROMPT, 'gemini_available': GEMINI_AVAILABLE})
 
 # --- Motor Control Endpoints ---
 @app.route('/motor/forward', methods=['POST'])
@@ -812,6 +978,22 @@ def motor_status():
     return jsonify({
         'trilobot_available': TRILOBOT_AVAILABLE,
         'status': 'ready'
+    })
+
+@app.route('/system/status', methods=['GET'])
+def system_status():
+    """Get overall system status including detection modes"""
+    return jsonify({
+        'trilobot_available': TRILOBOT_AVAILABLE,
+        'gemini_available': GEMINI_AVAILABLE,
+        'twelvelabs_available': bool(TWELVELABS_API_KEY),
+        'detection_mode': DETECTION_MODE,
+        'detection_prompt': DETECTION_PROMPT,
+        'recording_status': {
+            'is_recording': ROBOT_RECORDING,
+            'last_recording': last_recording_time,
+            'next_recording_in': max(0, RECORDING_INTERVAL - (time.time() - last_recording_time))
+        }
     })
 
 # --- Robot Analysis Endpoints ---
