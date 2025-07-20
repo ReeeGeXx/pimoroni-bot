@@ -112,6 +112,7 @@ If no risks are found, return:
 }
 ${userPrompt} ${riskLevelModifier}
 `;
+
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.GEMINI_MODEL}:generateContent?key=${config.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -119,38 +120,6 @@ ${userPrompt} ${riskLevelModifier}
             contents: [{ parts: [{ text: prompt }] }]
         })
     });
-
-    const indexID = '687bcbbc934487793c566db2';
-    const videoID = "687bd58f61fa6d2e4d153e38";
-
-    const tlResponse = await fetch(`https://api.twelvelabs.io/v1.2/videos/${indexID}/${videoID}?embedding_option=visual-text,audio&transcription=true`, {
-        method: "GET",
-        headers: {
-            "x-api-key": config.TL_API_KEY,
-            "Accept": "application/json"
-        }
-    });
-
-    const searchQuery = prompt + "Alter this for a video, look for something along the lines of risky such as inapproriate content, car license plates, house addresses, etc.";
-
-    const searchResponse = await fetch(`https://api.twelvelabs.io/v1/indexes/${indexID}/search`, {
-        method: "POST",
-        headers: {
-            "x-api-key": config.TL_API_KEY,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            query: searchQuery,
-            video_ids: [videoID]
-        })
-    });
-
-    const searchResult = await searchResponse.json();
-    console.log(searchResult);
-
-    const tlData = await tlResponse.json();
-    console.log(tlData);
-
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API request failed: ${response.status} - ${errorText}`);
@@ -173,15 +142,35 @@ ${userPrompt} ${riskLevelModifier}
         if (!parsed.riskLevel || !Array.isArray(parsed.riskyElements)) {
             throw new Error('Invalid response structure from AI');
         }
-
+        chrome.runtime.sendMessage({
+            type: 'ANALYSIS_COMPLETE',
+            data: parsed
+        });
         return parsed;
 
     } catch (err) {
         console.error('Failed to parse AI response:', aiResponse);
         throw new Error('AI response could not be parsed as JSON');
     }
+
+
 }
 
 chrome.runtime.onStartup.addListener(() => {
     console.log('Post Guardian extension started');
+});
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === 'ANALYZE_VIDEO') {
+        fetch("http://localhost:5000/analyze-video")
+            .then(res => res.json())
+            .then(data => {
+                sendResponse({ success: true, analysis: data });
+            })
+            .catch(error => {
+                console.error("Failed to call Python API:", error);
+                sendResponse({ success: false, error: error.message });
+            });
+        return true; // Required for async sendResponse
+    }
 });
