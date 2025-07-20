@@ -82,7 +82,7 @@ class GeminiVisionBlur:
                     {
                         "parts": [
                             {
-                                "text": f"Analyze this image and detect sensitive content. {prompt} Return a JSON response with bounding boxes for faces, ID cards, documents, and other sensitive items. Format: {{\"detections\": [{{\"bbox\": [x, y, width, height], \"type\": \"face|id|document|sensitive\", \"confidence\": 0.0-1.0}}]}}"
+                                "text": f"Analyze this image and detect sensitive content. {prompt} Look specifically for ID cards, passports, driver's licenses, credit cards, and faces. Return ONLY a JSON response with exact pixel coordinates for bounding boxes. Format: {{\"detections\": [{{\"bbox\": [x, y, width, height], \"type\": \"face|id|document|sensitive\", \"confidence\": 0.0-1.0}}]}} where x,y are top-left corner coordinates and width,height are the dimensions. Be precise with coordinates."
                             },
                             {
                                 "inline_data": {
@@ -127,6 +127,8 @@ class GeminiVisionBlur:
                 if 'content' in candidate and 'parts' in candidate['content']:
                     text_response = candidate['content']['parts'][0].get('text', '')
                     
+                    print(f"🔍 Raw Gemini response: {text_response[:200]}...")
+                    
                     # Try to extract JSON from response
                     try:
                         # Look for JSON in the response
@@ -140,11 +142,17 @@ class GeminiVisionBlur:
                                 for detection in parsed['detections']:
                                     bbox = detection.get('bbox', [0, 0, 0, 0])
                                     if len(bbox) == 4:
-                                        detections.append({
-                                            'bbox': tuple(bbox),
-                                            'type': detection.get('type', 'unknown'),
-                                            'confidence': detection.get('confidence', 0.0)
-                                        })
+                                        # Ensure coordinates are reasonable
+                                        x, y, w, h = bbox
+                                        if 0 <= x <= 1000 and 0 <= y <= 1000 and w > 0 and h > 0:
+                                            detections.append({
+                                                'bbox': tuple(bbox),
+                                                'type': detection.get('type', 'unknown'),
+                                                'confidence': detection.get('confidence', 0.0)
+                                            })
+                                            print(f"   📍 Parsed detection: {detection.get('type')} at {bbox}")
+                                        else:
+                                            print(f"   ⚠️  Skipping invalid coordinates: {bbox}")
                     except json.JSONDecodeError:
                         print(f"❌ Could not parse JSON from Gemini response: {text_response[:100]}...")
                         
@@ -229,6 +237,12 @@ class GeminiVisionBlur:
                     # Cache expired, call API
                     print(f"🔍 Analyzing frame {self.frame_count} with Gemini...")
                     detections = self.call_gemini_analysis(frame, prompt)
+                    
+                    # If Gemini returns no detections, use fallback
+                    if not detections:
+                        print("⚠️  Gemini returned no detections, using OpenCV fallback...")
+                        detections = self.fallback_opencv_detection(frame)
+                    
                     self.detection_cache[cache_key] = (current_time, detections)
                     blur_regions = self.process_detections(detections, frame.shape)
                     self.last_analysis_frame = self.frame_count
@@ -236,6 +250,12 @@ class GeminiVisionBlur:
                 # No cache, call API
                 print(f"🔍 Analyzing frame {self.frame_count} with Gemini...")
                 detections = self.call_gemini_analysis(frame, prompt)
+                
+                # If Gemini returns no detections, use fallback
+                if not detections:
+                    print("⚠️  Gemini returned no detections, using OpenCV fallback...")
+                    detections = self.fallback_opencv_detection(frame)
+                
                 self.detection_cache[cache_key] = (current_time, detections)
                 blur_regions = self.process_detections(detections, frame.shape)
                 self.last_analysis_frame = self.frame_count
@@ -275,6 +295,40 @@ class GeminiVisionBlur:
             self.detection_stats[key] += value
         
         return processed_frame, frame_stats
+    
+    def fallback_opencv_detection(self, frame):
+        """Fallback to OpenCV detection when Gemini fails"""
+        detections = []
+        
+        # Face detection
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        
+        for (x, y, w, h) in faces:
+            detections.append({
+                'bbox': (x, y, w, h),
+                'type': 'face',
+                'confidence': 0.7
+            })
+        
+        # Text detection for potential IDs
+        edges = cv2.Canny(gray, 50, 150)
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            aspect_ratio = w / h if h > 0 else 0
+            
+            # Look for card-like rectangles
+            if 1.5 <= aspect_ratio <= 3.0 and w > 80 and h > 40:
+                detections.append({
+                    'bbox': (x, y, w, h),
+                    'type': 'id_document',
+                    'confidence': 0.6
+                })
+        
+        return detections
     
     def add_status_overlay(self, frame, frame_stats):
         """Add status information overlay to frame"""
