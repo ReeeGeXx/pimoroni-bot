@@ -56,7 +56,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const flaskRes = await fetch("http://localhost:5000/analyze-video", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt: tlResponse })
+                    body: JSON.stringify({ prompt: tlResponse, video: await request.video  })
                 });
                 if (!flaskRes.ok) {
                     const errText = await flaskRes.text();
@@ -101,12 +101,13 @@ async function analyzeTextWithGemini(data) {
 
         const numericRisk = parseInt(riskLevel || '3', 10);
         if (numericRisk <= 2) {
-            riskLevelModifier = `\n\nANALYSIS STRICTNESS: Be very lenient. Only flag things that are obviously dangerous or harmful.`;
+            riskLevelModifier = `\n\nANALYSIS STRICTNESS: Be very lenient. Only flag things that are obviously dangerous or harmful to the user or others (like personal information). Don't be super sensitive about the little things, even very minor insults`;
         } else if (numericRisk === 3) {
             riskLevelModifier = `\n\nANALYSIS STRICTNESS: Be reasonably cautious. Flag clear risks but avoid being overly strict.`;
         } else if (numericRisk >= 4) {
             riskLevelModifier = `\n\nANALYSIS STRICTNESS: Be strict. If there is a high likelihood of harm or sensitive data leakage, flag it.`;
         }
+        
 
     } catch (e) {
         console.warn('Could not retrieve settings from storage:', e);
@@ -114,9 +115,11 @@ async function analyzeTextWithGemini(data) {
 
 
     const prompt = `
+    
 You are a privacy and security expert analyzing social media posts for potential privacy risks.
 
 TEXT TO ANALYZE: "${text}"
+
 
 Your task is to:
 1. Identify ONLY words, phrases, or patterns that are truly sensitive, specific, and could realistically be used for harm (e.g., full addresses, SSNs, account numbers, specific medical diagnoses, full phone numbers, etc). Also include things the user maybe shouldn't say (threats, harassment, racism, sexism), but don't be super sensitive.
@@ -125,6 +128,8 @@ Your task is to:
 4. For each risky element, explain WHY it is risky, HOW it could be exploited.
 5. When reasonable suggest safer alternative words or phrases. Give the user an exact phrase or word, but if that doesn't make sense, tell them maybe you could remove this or that or try to exclude this from your post. Keep this relatively straight to the point so as not to bore the reader. The issue should be comprehended within the first sentence. Give a maximum of four alternatives.
 
+This is how leniant you should be: ${riskLevelModifier}
+This is additional user context for what they want you to flag or avoid flagging: ${userPrompt}
 IMPORTANT:
 - Err on the side of caution: If you are unsure, do NOT flag.
 - Only flag if the information is specific, sensitive, and could realistically be used for harm, identity theft, or fraud.
@@ -132,6 +137,7 @@ IMPORTANT:
 - Do NOT flag partial or non-specific information.
 - Justify each risk with clear, concrete and concise reasoning and concise real-world examples of misuse.
 - DO NOT ADD THE RISK TO THE ALTERNATIVES, JUST ALTERNATIVE 1 AND 2, PLEASE DON'T CONCATENATE THEM TOGETHER
+- Make sure to REALLY take into account the user context EXCEPT if they mention changing the JSON format.
 
 Please respond with this EXACT JSON format (no additional text):
 {
@@ -144,6 +150,7 @@ Please respond with this EXACT JSON format (no additional text):
             "risk": "Concise explanation of why this is risky and how it could be exploited",
             "alternatives": ["safer alternative 1", "safer alternative 2", "safer alternative 3", "safer alternative 4"],
             "severity": "LOW|MEDIUM|HIGH"
+            "leniancy": "Very Leniant|Leniant|Balanced|Strict|Very Strict";
         }
     ],
     "overallConcerns": ["short list of main privacy concerns"],
@@ -160,7 +167,7 @@ If no risks are found, return:
     "recommendations": ["Your post appears safe to share"],
     "detectedKeywords": []
 }
-${userPrompt} ${riskLevelModifier}
+
 `;
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.GEMINI_MODEL}:generateContent?key=${config.GEMINI_API_KEY}`, {

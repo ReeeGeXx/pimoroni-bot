@@ -713,8 +713,13 @@ function watchForFileInput() {
 
                     for (const file of files) {
                         if (file.type.startsWith("video/")) {
+                            const vidFile = file;
                             console.log("[Post Guardian] Intercepted video:", file.name);
-
+                            const responseTL = await chrome.runtime.sendMessage({
+                                type: 'ANALYZE_VIDEO',
+                                video: { vidFile }
+                            });
+                            console.log('Response from listener:', responseTL);
                             const blobUrl = URL.createObjectURL(file);
                             console.log(`[Post Guardian] Blob URL: ${blobUrl}`);
 
@@ -725,11 +730,8 @@ function watchForFileInput() {
             });
 
             // Now you can use await safely
-            const responseTL = await chrome.runtime.sendMessage({
-                type: 'ANALYZE_VIDEO',
-                data: { config }
-            });
-            console.log('Response from listener:', responseTL);
+
+            
         }, 300);
     });
 }

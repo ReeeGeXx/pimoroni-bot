@@ -1,0 +1,76 @@
+/* Post Guardian Styles */
+.post-guardian-scorebar {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto 8px auto;
+    height: 18px;
+    border-radius: 9px;
+    background: linear-gradient(90deg, #e0e7ef 0%, #f3f4f6 100%);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+    position: relative;
+    transition: background 0.3s;
+}
+.post-guardian-scorebar-inner {
+    height: 100%;
+    border-radius: 9px;
+    background: linear-gradient(90deg, #28a745 0%, #ffc107 50%, #dc3545 100%);
+    transition: width 0.5s cubic-bezier(0.4, 2, 0.6, 1), background 0.3s;
+}
+.post-guardian-scorebar-label {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: 500;
+    color: #222;
+    pointer-events: none;
+    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+}
+.post-guardian-banner-animated {
+    animation: fadeInBanner 0.7s;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    border-radius: 8px;
+    transition: background 0.3s, color 0.3s;
+}
+@keyframes fadeInBanner {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.risky-word {
+    animation: riskyPulse 1.5s infinite alternate;
+    transition: border-color 0.3s;
+}
+@keyframes riskyPulse {
+    0% {
+        border-bottom-width: 2px;
+    }
+    100% {
+        border-bottom-width: 4px;
+    }
+}
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .post-guardian-scorebar {
+        background: linear-gradient(90deg, #23272f 0%, #2d3748 100%);
+    }
+    .post-guardian-scorebar-label,
+    .post-guardian-banner-animated,
+    #post-guardian-tooltip {
+        color: #eee !important;
+    }
+    .post-guardian-banner-animated {
+        background: #23272f !important;
+    }
+    #post-guardian-tooltip {
+        background: #23272f !important;
+        border: 1px solid #444 !important;
+    }
+}
