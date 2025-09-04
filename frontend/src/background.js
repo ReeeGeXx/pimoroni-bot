@@ -31,12 +31,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // VIDEO analysis branch
     if (request.type === 'ANALYZE_VIDEO') {
-        const tlPrompt = " You are sending a prompt to twelvelabs telling it to find clips for inappropriate content in a video such as middle fingers, bad words (audio or visual), license plates, addresses and what not, be concise";
+        const tlPrompt = " You are sending a prompt to labs telling it to find clips for inappropriate content in a video such as middle fingers, bad words (audio or visual), license plates, addresses and what not, be concise";
         (async () => {
             try {
                 // 1) Call Gemini
                 const geminiRes = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyCn0EamibbU1b6O0izrJF5xDCeCCoNVHLc`,
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key="API_KEY_HERE"`,
                     {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -52,11 +52,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const geminiJson = await geminiRes.json();
                 const tlResponse = geminiJson.candidates[0].content.parts[0].text.trim();
 
-                // 2) Call your Flask backend
+
                 const flaskRes = await fetch("http://localhost:5000/analyze-video", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt: tlResponse, video: await request.video  })
+                    body: JSON.stringify({ prompt: tlResponse, video: request.video, filename: request.video.name })
                 });
                 if (!flaskRes.ok) {
                     const errText = await flaskRes.text();
@@ -76,7 +76,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ success: false, error: "Unrecognized request type." });
     return false;
 });
-
 
 
 

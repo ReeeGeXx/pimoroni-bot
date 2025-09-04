@@ -1,4 +1,3 @@
-import { LRUCache } from './cache-manager.js';
 
 console.log("Post Guardian content script loaded!");
 
@@ -21,13 +20,25 @@ if (window.PostGuardianConfig) {
         }
     };
 }
+let LRUCache;  // declare at top
+let cacheManager;
+let textCache;
+(async () => {
+    ({ LRUCache } = await import(chrome.runtime.getURL("cache-manager.js")));
 
-// Initialize cache manager
-const cacheManager = new LRUCache(20); // Store last 20 analyses
+    const cache = new LRUCache(10);
+    console.log("Cache created:", cache);
+})();
+
+// Now works, because LRUCache gets set later
+setTimeout(() => {
+    cacheManager = new LRUCache(20);
+    textCache = new LRUCache(20);
+    console.log("Global cache manager created:", cacheManager);
+}, 100);
 
 // Smart caching system
 // Replace contextCache with LRUCache
-const textCache = new LRUCache(20); // Store last 20 analyses
 let lastAnalyzedText = '';
 
 function jaccardSimilarity(a, b) {
@@ -713,8 +724,8 @@ function watchForFileInput() {
 
                     for (const file of files) {
                         if (file.type.startsWith("video/")) {
-                            const vidFile = file;
                             console.log("[Post Guardian] Intercepted video:", file.name);
+                            const vidFile = await fileToBase64(file); // Convert to video to readable format for backend
                             const responseTL = await chrome.runtime.sendMessage({
                                 type: 'ANALYZE_VIDEO',
                                 video: { vidFile }
@@ -722,18 +733,22 @@ function watchForFileInput() {
                             console.log('Response from listener:', responseTL);
                             const blobUrl = URL.createObjectURL(file);
                             console.log(`[Post Guardian] Blob URL: ${blobUrl}`);
-
-                            // Optionally preview the video or upload to backend here
                         }
                     }
                 });
             });
-
-            // Now you can use await safely
 
             
         }, 300);
     });
 }
 
+async function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
 watchForFileInput();

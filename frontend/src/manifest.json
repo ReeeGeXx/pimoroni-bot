@@ -18,5 +18,16 @@
       "js": ["config.js", "content.js"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+    "web_accessible_resources": [
+      {
+        "resources": [
+          "cache-manager.js"
+        ],
+        "matches": [
+          "https://x.com/*"
+        ]
+      }
+    ]
+
 }
