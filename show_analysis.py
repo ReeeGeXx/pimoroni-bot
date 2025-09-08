@@ -113,4 +113,13 @@ def show_detailed_analysis(prompt, video_path):
                 "thumbnail_url": result.get("thumbnail_url"),
             }
         )
+    delete_video_from_twelvelabs(index_id, video_id)
     return segments
+
+
+def delete_video_from_twelvelabs(index_id, video_id):
+    url = f"https://api.twelvelabs.io/v1.3/indexes/{index_id}/videos/{video_id}"
+    headers = {"x-api-key": TWELVELABS_API_KEY}
+    res = requests.delete(url, headers=headers)
+    res.raise_for_status()
+    return res.json()
