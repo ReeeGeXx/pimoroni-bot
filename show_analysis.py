@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-
+promptText = ""
 TWELVELABS_API_KEY = os.getenv('TWELVELABS_API_KEY')
 def get_default_index():
     url = "https://api.twelvelabs.io/v1.3/indexes"
@@ -25,15 +25,21 @@ def wait_for_video_ready(index_id, video_id, timeout=500, interval=5):
 
     waited = 0
     while waited < timeout:
-        res = requests.get(url, headers=headers)
-        res.raise_for_status()
-        data = res.json().get("data", {})
-        status = data.get("status")
-        if status == "ready":
-            return data
-        elif status == "failed":
-            raise RuntimeError(f"Video {video_id} failed to process: {data}")
+        results_data = twelvelabs_search(index_id, video_id, promptText)
 
+        if results_data:
+            segments = []
+            for result in results_data:
+                segments.append(
+                    {
+                        "score": result.get("score"),
+                        "start_time": result.get("start"),
+                        "end_time": result.get("end"),
+                        "confidence": result.get("confidence"),
+                        "thumbnail_url": result.get("thumbnail_url"),
+                    }
+                )
+            return segments
         time.sleep(interval)
         waited += interval
 
@@ -83,6 +89,7 @@ def twelvelabs_search(index_id, video_id, query, max_retries=3):
 
 def show_detailed_analysis(prompt, video_path):
     """Upload video, wait until ready, then run search"""
+    promptText = prompt
     if not TWELVELABS_API_KEY:
         raise RuntimeError("No API key available")
 
@@ -97,20 +104,3 @@ def show_detailed_analysis(prompt, video_path):
     # Wait until video is ready
     video_data = wait_for_video_ready(index_id, video_id)
     print(f" UPLOADED: {video_data.get('system_metadata', {}).get('filename')}")
-
-    # Run search
-    results_data = twelvelabs_search(index_id, video_id, prompt)
-
-    # Format results
-    segments = []
-    for result in results_data:
-        segments.append(
-            {
-                "score": result.get("score"),
-                "start_time": result.get("start"),
-                "end_time": result.get("end"),
-                "confidence": result.get("confidence"),
-                "thumbnail_url": result.get("thumbnail_url"),
-            }
-        )
-    return segments
