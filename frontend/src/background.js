@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             try {
                 // 1) Call Gemini
                 const geminiRes = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key='API_KEY_HERE'`,
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyBokQqUw64mu0Q_Hr2SEUDZBzWVphFdQvI`,
                     {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -82,7 +82,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function analyzeTextWithGemini(data) {
     const { text, config } = data;
 
-    if (!config.GEMINI_API_KEY || config.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
+    if (!config.GEMINI_API_KEY || config.GEMINI_API_KEY === 'AIzaSyBokQqUw64mu0Q_Hr2SEUDZBzWVphFdQvI') {
         throw new Error('Gemini API key not configured');
     }
 
