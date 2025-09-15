@@ -50,53 +50,38 @@ def wait_until_ready(index_id, video_id, timeout=600, interval=10):
 
     raise TimeoutError(f"Video {video_id} not ready after {timeout}s")
 
-
-def twelvelabs_search(video_id, prompt, timeout=300, interval=5):
+import requests
+def twelvelabs_search(index_id, video_id, query, max_retries=3):
     """
-    Run a TwelveLabs analysis job on a video and wait for results.
-    Returns the completed results list.
+    Run a TwelveLabs search query against an indexed video.
     """
-
-    # 1. Kick off analysis request
-    data = {
-        "video_id": video_id,
-        "prompt": prompt,
-        "temperature": 0.2
+    payload = {
+        "index_id": (None, str(index_id)),
+        "video_id": (None, str(video_id)),
+        "query_text": (None, str(query)),
+        "search_options": (None, "visual"),  # ✅ REQUIRED
     }
     headers = {"x-api-key": TWELVELABS_API_KEY}
 
-    res = requests.post("https://api.twelvelabs.io/v1.3/analyze", json=data, headers=headers)
-    res.raise_for_status()
-    job = res.json()
+    backoff = 1
+    for attempt in range(1, max_retries + 1):
+        try:
+            res = requests.post(
+                "https://api.twelvelabs.io/v1.3/search",
+                files=payload,  # ✅ multipart/form-data
+                headers=headers,
+            )
+            res.raise_for_status()
+            return res.json().get("data", [])
+        except HTTPError as e:
+            if res.status_code == 429 and attempt < max_retries:
+                retry_after = int(res.headers.get("Retry-After", backoff))
+                time.sleep(retry_after)
+                backoff *= 2
+            else:
+                print("❌ Search failed:", res.text)
+                raise
 
-    job_id = job.get("id")
-    if not job_id:
-        raise RuntimeError(f"No job id returned: {job}")
-
-    print(f"Started analysis job {job_id} for video {video_id}")
-
-    # 2. Poll until COMPLETED or timeout
-    waited = 0
-    while waited < timeout:
-        status_res = requests.get(
-            f"https://api.twelvelabs.io/v1.3/analyze/{job_id}",
-            headers=headers
-        )
-        status_res.raise_for_status()
-        status_data = status_res.json()
-
-        status = status_data.get("status")
-        if status == "COMPLETED":
-            print("✅ Analysis completed")
-            return status_data.get("results", [])
-        elif status == "FAILED":
-            raise RuntimeError(f"Analysis failed: {status_data}")
-        
-        print(f"⏳ Still {status}... waited {waited}s")
-        time.sleep(interval)
-        waited += interval
-
-    raise TimeoutError(f"Analysis job {job_id} did not finish after {timeout} seconds")
 
 
 def show_detailed_analysis(prompt, video_path):
@@ -117,5 +102,7 @@ def show_detailed_analysis(prompt, video_path):
 
     # Now search
     results = twelvelabs_search(index_id, video_id, prompt)
-    print(results)
+    import json
+    print("\n🔎 Analysis Results:")
+    print(json.dumps(results, indent=2))
     return results

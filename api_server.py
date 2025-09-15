@@ -12,7 +12,8 @@ def analyze_video():
     data = request.get_json()
     prompt = data.get(
         "prompt",
-        "Find inappropriate content in a video such as middle fingers, bad words (audio or visual), license plates, addresses, etc.",
+        "computer screen"
+        #"Find inappropriate content in a video such as middle fingers, bad words (audio or visual), license plates, addresses, etc.",
     )
     video_data = data.get("video")
 
@@ -39,6 +40,8 @@ def analyze_video():
         results = show_detailed_analysis(prompt, temp_video_path)
         return jsonify({"success": True, "results": results})
     except Exception as e:
+        import traceback
+        traceback.print_exc()  # <-- dump full stacktrace in terminal
         return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
