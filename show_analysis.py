@@ -30,7 +30,7 @@ def upload_video_to_twelvelabs(video_path: str, index_id: str):
 
 def wait_until_ready(index_id, video_id, timeout=600, interval=10):
     """Poll TwelveLabs until the video is indexed and ready for search"""
-    url = f"https://api.twelvelabs.io/v1.3/indexes/{index_id}/videos/{video_id}"
+    url = f"https://api.twelvelabs.io/v1.3/tasks/{video_id}"
     headers = {"x-api-key": TWELVELABS_API_KEY}
 
     waited = 0
@@ -38,17 +38,17 @@ def wait_until_ready(index_id, video_id, timeout=600, interval=10):
         res = requests.get(url, headers=headers)
         res.raise_for_status()
         data = res.json()
-        status = data.get("hls", {}).get("status")
+        status = data.get("status")
         print(f"Video status: {status}")
-        #print(json.dumps(data, indent=2))
 
-        if status == "COMPLETE":
+        if status == "ready":
             return data  # return metadata when ready
 
         time.sleep(interval)
         waited += interval
 
     raise TimeoutError(f"Video {video_id} not ready after {timeout}s")
+
 
 import requests
 def twelvelabs_search(index_id, video_id, query, max_retries=3):
@@ -57,9 +57,12 @@ def twelvelabs_search(index_id, video_id, query, max_retries=3):
     """
     payload = {
         "index_id": (None, str(index_id)),
-        "video_id": (None, str(video_id)),
-        "query_text": (None, str(query)),
-        "search_options": (None, "visual"),  # ✅ REQUIRED
+        "video_id": (
+            None,
+            str(video_id),
+        ),
+        "query_text": (None, "Look for movement"),
+        "search_options": (None, "visual,audio,text"),
     }
     headers = {"x-api-key": TWELVELABS_API_KEY}
 
@@ -68,11 +71,20 @@ def twelvelabs_search(index_id, video_id, query, max_retries=3):
         try:
             res = requests.post(
                 "https://api.twelvelabs.io/v1.3/search",
-                files=payload,  # ✅ multipart/form-data
+                files=payload, 
                 headers=headers,
             )
             res.raise_for_status()
-            return res.json().get("data", [])
+            results = res.json().get("data", [])
+
+            for clip in results:
+                score = clip.get("score")
+                start = clip.get("start")
+                end = clip.get("end")
+                confidence = clip.get("confidence")
+                print(f"score={score} start={start} end={end} confidence={confidence}")
+            return results
+
         except HTTPError as e:
             if res.status_code == 429 and attempt < max_retries:
                 retry_after = int(res.headers.get("Retry-After", backoff))
@@ -81,7 +93,6 @@ def twelvelabs_search(index_id, video_id, query, max_retries=3):
             else:
                 print("❌ Search failed:", res.text)
                 raise
-
 
 
 def show_detailed_analysis(prompt, video_path):
