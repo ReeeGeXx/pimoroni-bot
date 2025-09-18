@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             try {
                 // 1) Call Gemini
                 const geminiRes = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key="GEMINI_KEY_HERE"`,
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyBokQqUw64mu0Q_Hr2SEUDZBzWVphFdQvI`,
                     {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -51,8 +51,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 }
                 const geminiJson = await geminiRes.json();
                 const tlResponse = geminiJson.candidates[0].content.parts[0].text.trim();
-
-
                 const flaskRes = await fetch("http://localhost:5000/analyze-video", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -63,7 +61,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     throw new Error(`Flask error ${flaskRes.status}: ${errText}`);
                 }
                 const analysis = await flaskRes.json();
-                sendResponse({ success: true, analysis });
+                const timestamps = analysis.results.map(r => {
+                    return `${r.start.toFixed(2)}s - ${r.end.toFixed(2)}s`;
+                });
+
+                // Remove duplicates
+                const uniqueTimestamps = [...new Set(timestamps)];
+
+                // Build the Gemini prompt
+                const tlPromptAnalysis = `
+                Please review the following analysis for each time stamp and provide a summary of time ranges which the user should check/edit the video
+                due to sensitive information or inappropriate content being present.
+                ${uniqueTimestamps.join(", ")}
+                `;
+                const geminiResTL = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key='GEMINI_KEY_HERE`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: tlPromptAnalysis }] }]
+                        })
+                    }
+                );
+                if (!geminiResTL.ok) {
+                    const t = await geminiResTL.text();
+                    throw new Error(`Gemini error ${geminiResTL.status}: ${t}`);
+                }
+                const geminiJsonTL = await geminiResTL.json();
+                sendResponse({ success: true, analysis, geminiJsonTL });
             } catch (error) {
                 console.error("ANALYZE_VIDEO failed:", error);
                 sendResponse({ success: false, error: error.message });
@@ -106,7 +132,7 @@ async function analyzeTextWithGemini(data) {
         } else if (numericRisk >= 4) {
             riskLevelModifier = `\n\nANALYSIS STRICTNESS: Be strict. If there is a high likelihood of harm or sensitive data leakage, flag it.`;
         }
-        
+
 
     } catch (e) {
         console.warn('Could not retrieve settings from storage:', e);

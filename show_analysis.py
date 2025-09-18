@@ -51,6 +51,45 @@ def wait_until_ready(index_id, video_id, timeout=600, interval=10):
 
 
 import requests
+import json
+
+
+def analyze_clip(video_id: str, start: float, end: float):
+    url = "https://api.twelvelabs.io/v1.3/analyze"
+    headers = {
+        "x-api-key": TWELVELABS_API_KEY,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "video_id": video_id,
+        "prompt": (
+            f"Describe what sensitive information is present within the timeframe {start:.2f} and {end:.2f} seconds. "
+            f"Sensitive information may include addresses, license plates, credit cards, ID, etc. Keep it relatively short and straight to the point, but descriptive"
+        ),
+        "stream": True,  
+    }
+    res = requests.post(url, json=payload, headers=headers, stream=True)
+    res.raise_for_status()
+
+    text_parts = []
+    for line in res.iter_lines(decode_unicode=True):
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        if event.get("event_type") == "text_generation":
+            text_parts.append(event.get("text", ""))
+
+        if event.get("event_type") == "stream_end":
+            break 
+
+    return "".join(text_parts).strip()
+
+
+import requests
 def twelvelabs_search(index_id, video_id, query, max_retries=3):
     """
     Run a TwelveLabs search query against an indexed video.
@@ -62,7 +101,7 @@ def twelvelabs_search(index_id, video_id, query, max_retries=3):
             str(video_id),
         ),
         "query_text": (None, "Look for movement"),
-        "search_options": (None, "visual,audio,text"),
+        "search_options": (None, "visual"),
     }
     headers = {"x-api-key": TWELVELABS_API_KEY}
 
@@ -113,7 +152,13 @@ def show_detailed_analysis(prompt, video_path):
 
     # Now search
     results = twelvelabs_search(index_id, video_id, prompt)
-    import json
-    print("\n🔎 Analysis Results:")
-    print(json.dumps(results, indent=2))
-    return results
+    detailed_results = []
+    for clip in results:
+        start, end = clip["start"], clip["end"]
+        analysis = analyze_clip(video_id, start, end)
+        clip["analysis"] = analysis
+        detailed_results.append(clip)
+        print(f"\n⏱ {start:.2f}-{end:.2f}s")
+        print(json.dumps(analysis, indent=2))
+
+    return detailed_results

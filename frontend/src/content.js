@@ -8,7 +8,7 @@ if (window.PostGuardianConfig) {
 } else {
     // Fallback configuration if config file not loaded
     config = {
-        GEMINI_API_KEY: 'AIzaSyAQQHZosNLZsF5QUzRc3NonigEecOGybFE',
+        GEMINI_API_KEY: 'GEMINI_KEY_HERE',
         GEMINI_MODEL: 'gemini-1.5-flash',
         DEBOUNCE_DELAY: 1000,
         CONFIDENCE_THRESHOLD: 70,
@@ -332,6 +332,105 @@ function updateOverlay(tweetBox, overlay, analysis) {
         wordSpan.addEventListener('mouseenter', showTooltip);
         wordSpan.addEventListener('mouseleave', hideTooltip);
     });
+}
+
+function displayVideoRisks(tweetBox, responseTL) {
+    // remove old container if already exists
+    let oldContainer = tweetBox.parentElement.querySelector(".pg-video-risk-container");
+    if (oldContainer) oldContainer.remove();
+
+    const container = document.createElement("div");
+    container.className = "pg-video-risk-container";
+    container.style = `
+        margin-top: 8px;
+        padding: 10px;
+        font-size: 13px;
+        background: #fff3cd;
+        border: 1px solid #ffeeba;
+        border-radius: 8px;
+        font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+        color: #856404;
+    `;
+
+    let html = `<strong>Video analysis:</strong><br>`;
+
+    if (responseTL && Array.isArray(responseTL) && responseTL.length > 0) {
+        // Deduplicate by start, end, and confidence
+        const seen = new Set();
+        const uniqueItems = responseTL.filter(item => {
+            const key = `${item.start}-${item.end}-${item.confidence}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        if (uniqueItems.length > 0) {
+            html += `<ul style="margin:6px 0; padding-left:18px;">`;
+            uniqueItems.forEach(item => {
+                const confidenceLabel = item.confidence
+                    ? item.confidence.charAt(0).toUpperCase() + item.confidence.slice(1)
+                    : "Unknown";
+                html += `<span style="font-weight:600;"> ${item.analysis})</span>`;
+            });
+        } else {
+            html += `<div>No risky timestamps detected.</div>`;
+        }
+    } else {
+        html += `<div>No risky timestamps detected.</div>`;
+    }
+
+    container.innerHTML = html;
+
+    // insert right after tweetBox (under video preview + text box)
+    tweetBox.parentElement.appendChild(container);
+}
+
+
+
+function showVideoProcessing(tweetBox) {
+    // remove any old indicator
+    let oldContainer = tweetBox.parentElement.querySelector(".pg-video-risk-container");
+    if (oldContainer) oldContainer.remove();
+
+    const container = document.createElement("div");
+    container.className = "pg-video-risk-container";
+    container.style = `
+        margin-top: 8px;
+        padding: 10px;
+        font-size: 13px;
+        background: #f0f8ff;
+        border: 1px solid #cce5ff;
+        border-radius: 8px;
+        font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+        color: #007bff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    `;
+
+    container.innerHTML = `
+        <div class="pg-spinner" style="
+            border: 3px solid #cce5ff;
+            border-top: 3px solid #004085;
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            animation: spin 1s linear infinite;">
+        </div>
+        <span>Analyzing video…</span>
+    `;
+
+    // add spinner animation style
+    const style = document.createElement("style");
+    style.innerHTML = `
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
+
+    tweetBox.parentElement.appendChild(container);
 }
 
 function escapeHtml(text) {
@@ -709,7 +808,7 @@ function createOverlay(tweetBox, index) {
 }
 
 function watchForFileInput() {
-    document.body.addEventListener("click", async (e) => {
+    document.body.addEventListener("click", async () => {
         // Wait for user to click the media icon
         setTimeout(async () => {
             const inputs = document.querySelectorAll('input[type="file"]');
@@ -724,8 +823,13 @@ function watchForFileInput() {
 
                     for (const file of files) {
                         if (file.type.startsWith("video/")) {
+                            const tweetBox = document.querySelector('[aria-label="Post text"]');
+                            if (!tweetBox) return;
+
+                            showVideoProcessing(tweetBox);
+
                             console.log("[Post Guardian] Intercepted video:", file.name);
-                            const vidFile = await fileToBase64(file); // Convert to video to readable format for backend
+                            const vidFile = await fileToBase64(file);
                             const responseTL = await chrome.runtime.sendMessage({
                                 type: 'ANALYZE_VIDEO',
                                 video: { vidFile }
@@ -733,15 +837,22 @@ function watchForFileInput() {
                             console.log('Response from listener:', responseTL);
                             const blobUrl = URL.createObjectURL(file);
                             console.log(`[Post Guardian] Blob URL: ${blobUrl}`);
+                            displayVideoRisks(tweetBox, responseTL.analysis?.results || []);
                         }
                     }
                 });
             });
-
-            
-        }, 300);
+        }, 500);
     });
 }
+
+function formatTime(seconds) {
+    if (!seconds && seconds !== 0) return "--:--";
+    const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, "0");
+    const s = Math.floor(seconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+}
+
 
 async function fileToBase64(file) {
     return new Promise((resolve, reject) => {
